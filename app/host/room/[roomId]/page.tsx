@@ -1,0 +1,359 @@
+"use client";
+
+import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
+import { createWebSocket } from "@/lib/websocket";
+import {
+  getRoomStatus,
+  startGame,
+  nextRound,
+  endGame,
+  assignIndicators,
+  getGameSummary,
+  getCurrentRound,
+} from "@/lib/api";
+import { loadHostContext } from "@/lib/utils";
+import { TOTAL_ROUNDS, INDICATOR_ASSIGNMENT_AFTER_ROUND } from "@/lib/constants";
+import type {
+  RoomStatusResponse,
+  GameSummaryResponse,
+  RoundCurrentResponse,
+} from "@/lib/types";
+
+/**
+ * Host 控制面板
+ */
+export default function HostRoomPage({
+  params,
+}: {
+  params: Promise<{ roomId: string }>;
+}) {
+  const { roomId } = use(params);
+  const router = useRouter();
+
+  const [roomStatus, setRoomStatus] = useState<RoomStatusResponse | null>(null);
+  const [currentRound, setCurrentRound] = useState<RoundCurrentResponse | null>(null);
+  const [summary, setSummary] = useState<GameSummaryResponse | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const hostContext = loadHostContext();
+
+  // 拉取房間狀態
+  const fetchRoomStatus = async () => {
+    if (!hostContext) return;
+    try {
+      const status = await getRoomStatus(hostContext.room_code);
+      setRoomStatus(status);
+
+      if (status.status === "playing") {
+        const round = await getCurrentRound(roomId);
+        setCurrentRound(round);
+      }
+
+      if (status.status === "finished") {
+        const gameSummary = await getGameSummary(roomId);
+        setSummary(gameSummary);
+      }
+    } catch (err) {
+      console.error("Failed to fetch room status:", err);
+    }
+  };
+
+  // 開始遊戲
+  const handleStartGame = async () => {
+    setIsProcessing(true);
+    try {
+      await startGame(roomId);
+      await fetchRoomStatus();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "開始遊戲失敗");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 下一輪
+  const handleNextRound = async () => {
+    setIsProcessing(true);
+    try {
+      await nextRound(roomId);
+      await fetchRoomStatus();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "開始下一輪失敗");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 發放指示物
+  const handleAssignIndicators = async () => {
+    setIsProcessing(true);
+    try {
+      await assignIndicators(roomId);
+      alert("指示物已發放！請通知學生查看手機");
+      await fetchRoomStatus();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "發放指示物失敗");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 結束遊戲
+  const handleEndGame = async () => {
+    if (!confirm("確定要結束遊戲嗎？")) return;
+
+    setIsProcessing(true);
+    try {
+      await endGame(roomId);
+      await fetchRoomStatus();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "結束遊戲失敗");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // WebSocket 事件處理
+  useEffect(() => {
+    if (!hostContext) {
+      router.push("/host");
+      return;
+    }
+
+    const websocket = createWebSocket(roomId);
+
+    websocket.on("ROUND_ENDED", () => {
+      console.log("[Host] Round ended");
+      fetchRoomStatus();
+    });
+
+    websocket.on("GAME_ENDED", () => {
+      console.log("[Host] Game ended");
+      fetchRoomStatus();
+    });
+
+    websocket.connect();
+
+    return () => {
+      websocket.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, hostContext, router]);
+
+  // 初始載入與定期更新
+  useEffect(() => {
+    fetchRoomStatus();
+    const interval = setInterval(fetchRoomStatus, 3000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!hostContext || !roomStatus) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <p className="text-gray-600">載入中...</p>
+      </div>
+    );
+  }
+
+  const isWaiting = roomStatus.status === "waiting";
+  const isPlaying = roomStatus.status === "playing";
+  const isFinished = roomStatus.status === "finished";
+  const canStartGame = isWaiting && roomStatus.player_count >= 2 && roomStatus.player_count % 2 === 0;
+  const canNextRound = isPlaying && currentRound && currentRound.round_number < TOTAL_ROUNDS;
+  const canAssignIndicators = isPlaying && currentRound && currentRound.round_number === INDICATOR_ASSIGNMENT_AFTER_ROUND;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* 頂部資訊卡 */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* 房間代碼 */}
+            <div className="text-center">
+              <p className="text-sm text-gray-500 mb-2">房間代碼</p>
+              <p className="text-5xl font-mono font-bold text-indigo-600 tracking-widest">
+                {roomStatus.code}
+              </p>
+            </div>
+
+            {/* 玩家人數 */}
+            <div className="text-center">
+              <p className="text-sm text-gray-500 mb-2">目前玩家數</p>
+              <p className="text-5xl font-bold text-gray-800">
+                {roomStatus.player_count}
+              </p>
+              {isWaiting && roomStatus.player_count % 2 !== 0 && (
+                <p className="text-sm text-orange-600 mt-2">
+                  ⚠️ 玩家數必須為偶數
+                </p>
+              )}
+            </div>
+
+            {/* 當前狀態 */}
+            <div className="text-center">
+              <p className="text-sm text-gray-500 mb-2">遊戲狀態</p>
+              <div className="text-2xl font-semibold">
+                {isWaiting && <span className="text-blue-600">等待中</span>}
+                {isPlaying && currentRound && (
+                  <span className="text-green-600">
+                    第 {currentRound.round_number} 輪
+                  </span>
+                )}
+                {isFinished && <span className="text-gray-600">已結束</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 控制按鈕區 */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">控制面板</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 開始遊戲 */}
+            {isWaiting && (
+              <button
+                onClick={handleStartGame}
+                disabled={!canStartGame || isProcessing}
+                className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white font-semibold py-4 rounded-lg transition shadow-md disabled:shadow-none"
+              >
+                開始遊戲
+              </button>
+            )}
+
+            {/* 下一輪 */}
+            {isPlaying && (
+              <button
+                onClick={handleNextRound}
+                disabled={!canNextRound || isProcessing}
+                className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white font-semibold py-4 rounded-lg transition shadow-md disabled:shadow-none"
+              >
+                {canNextRound ? "開始下一輪" : "已是最後一輪"}
+              </button>
+            )}
+
+            {/* 發放指示物 */}
+            {isPlaying && canAssignIndicators && (
+              <button
+                onClick={handleAssignIndicators}
+                disabled={isProcessing}
+                className="bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-300 text-white font-semibold py-4 rounded-lg transition shadow-md disabled:shadow-none"
+              >
+                發放指示物
+              </button>
+            )}
+
+            {/* 結束遊戲 */}
+            {isPlaying && (
+              <button
+                onClick={handleEndGame}
+                disabled={isProcessing}
+                className="bg-red-500 hover:bg-red-600 disabled:bg-gray-300 text-white font-semibold py-4 rounded-lg transition shadow-md disabled:shadow-none"
+              >
+                結束遊戲
+              </button>
+            )}
+          </div>
+
+          {/* 提示訊息 */}
+          {isWaiting && (
+            <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">
+                💡 等待學生加入房間。玩家數必須為偶數才能開始遊戲。
+              </p>
+            </div>
+          )}
+
+          {isPlaying && currentRound && (
+            <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-sm text-green-800">
+                ✅ 遊戲進行中 - 第 {currentRound.round_number} 輪 / 共 {TOTAL_ROUNDS} 輪
+              </p>
+              {currentRound.round_number === INDICATOR_ASSIGNMENT_AFTER_ROUND && (
+                <p className="text-sm text-yellow-800 mt-2">
+                  ⚠️ 本輪結束後，請點擊「發放指示物」讓學生找到隊友
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 遊戲摘要（結束後顯示） */}
+        {isFinished && summary && (
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">遊戲結果</h2>
+
+            {/* 策略統計 */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-700 mb-3">
+                整體策略分布
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                  <p className="text-sm text-gray-600 mb-1">加速比例</p>
+                  <p className="text-3xl font-bold text-red-600">
+                    {(summary.stats.accelerate_ratio * 100).toFixed(1)}%
+                  </p>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                  <p className="text-sm text-gray-600 mb-1">轉彎比例</p>
+                  <p className="text-3xl font-bold text-blue-600">
+                    {(summary.stats.turn_ratio * 100).toFixed(1)}%
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 玩家排名 */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-700 mb-3">
+                玩家排名（依總分）
+              </h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {summary.players.map((player, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between bg-gray-50 rounded-lg p-4"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className="text-2xl font-bold text-gray-400">
+                        #{index + 1}
+                      </div>
+                      <div className="font-semibold text-gray-800">
+                        {player.display_name}
+                      </div>
+                    </div>
+                    <div className="text-2xl font-bold text-indigo-600">
+                      {player.total_payoff > 0 ? "+" : ""}
+                      {player.total_payoff}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* QR Code 區域（等待時顯示） */}
+        {isWaiting && (
+          <div className="bg-white rounded-2xl shadow-lg p-6 text-center">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">
+              學生加入方式
+            </h2>
+            <div className="bg-gray-100 rounded-lg p-8 inline-block">
+              <p className="text-gray-600 mb-4">QR Code 或網址：</p>
+              <p className="text-lg font-mono text-indigo-600">
+                {typeof window !== "undefined" &&
+                  `${window.location.origin}/join?code=${roomStatus.code}`}
+              </p>
+              <p className="text-sm text-gray-500 mt-4">
+                （實際部署時可整合 QR Code 生成）
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,65 +1,106 @@
-import Image from "next/image";
+import Link from "next/link";
 
+/**
+ * 首頁 - 導航到玩家端或 Host 端
+ */
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 p-4">
+      <div className="w-full max-w-4xl">
+        {/* 標題 */}
+        <div className="text-center mb-12">
+          <h1 className="text-5xl font-bold text-gray-800 mb-4">
+            膽小鬼賽局
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-xl text-gray-600">
+            多人互動賽局教學系統
+          </p>
+          <p className="text-gray-500 mt-2">
+            Game Theory Teaching Platform
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* 選項卡 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* 玩家端 */}
+          <Link href="/join">
+            <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition cursor-pointer group">
+              <div className="w-16 h-16 bg-blue-500 rounded-full mx-auto flex items-center justify-center mb-4 group-hover:scale-110 transition">
+                <svg
+                  className="w-8 h-8 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                  />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800 text-center mb-3">
+                學生端
+              </h2>
+              <p className="text-gray-600 text-center mb-4">
+                使用手機加入遊戲房間
+              </p>
+              <ul className="text-sm text-gray-500 space-y-2">
+                <li>✓ 掃描 QR Code 或輸入房號</li>
+                <li>✓ 參與 10 輪賽局</li>
+                <li>✓ 與同學互動與討論</li>
+              </ul>
+            </div>
+          </Link>
+
+          {/* Host 端 */}
+          <Link href="/host">
+            <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition cursor-pointer group">
+              <div className="w-16 h-16 bg-indigo-500 rounded-full mx-auto flex items-center justify-center mb-4 group-hover:scale-110 transition">
+                <svg
+                  className="w-8 h-8 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800 text-center mb-3">
+                教師端
+              </h2>
+              <p className="text-gray-600 text-center mb-4">
+                在大螢幕控制遊戲流程
+              </p>
+              <ul className="text-sm text-gray-500 space-y-2">
+                <li>✓ 建立房間與生成代碼</li>
+                <li>✓ 控制回合進行</li>
+                <li>✓ 查看即時統計與結果</li>
+              </ul>
+            </div>
+          </Link>
         </div>
-      </main>
+
+        {/* 底部資訊 */}
+        <div className="mt-12 text-center">
+          <div className="bg-white/50 backdrop-blur rounded-lg p-6 inline-block">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">
+              關於此遊戲
+            </h3>
+            <p className="text-sm text-gray-600 max-w-2xl">
+              膽小鬼賽局（Chicken Game）是經典的賽局理論情境。
+              本系統讓學生透過實際參與，體驗策略選擇、信號傳遞與團隊協作，
+              從遊戲中學習經濟學與決策理論。
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
