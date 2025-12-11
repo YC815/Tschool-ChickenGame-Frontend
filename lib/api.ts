@@ -8,9 +8,11 @@ import type {
   RoomCreate,
   RoomResponse,
   RoomStatusResponse,
+  RoomListItem,
   PlayerJoin,
   PlayerResponse,
   RoundCurrentResponse,
+  RoomStateResponse,
   PairResponse,
   ActionSubmit,
   ActionResponse,
@@ -75,6 +77,21 @@ export async function getRoomStatus(
   return handleResponse<RoomStatusResponse>(response);
 }
 
+export async function getRoomState(
+  roomId: string,
+  version = 0,
+  playerId?: string,
+): Promise<RoomStateResponse> {
+  const params = new URLSearchParams({ version: String(version) });
+  if (playerId) {
+    params.set("player_id", playerId);
+  }
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/state?${params.toString()}`;
+  console.log(`[API SEND] GET ${url}`);
+  const response = await fetch(url);
+  return handleResponse<RoomStateResponse>(response);
+}
+
 export async function startGame(roomId: string): Promise<ActionResponse> {
   const url = `${API_BASE_URL}/api/rooms/${roomId}/start`;
   console.log(`[API SEND] POST ${url}`);
@@ -109,6 +126,22 @@ export async function getGameSummary(
   console.log(`[API SEND] GET ${url}`);
   const response = await fetch(url);
   return handleResponse<GameSummaryResponse>(response);
+}
+
+export async function getAllRooms(): Promise<RoomListItem[]> {
+  const url = `${API_BASE_URL}/api/rooms`;
+  console.log(`[API SEND] GET ${url}`);
+  const response = await fetch(url);
+  return handleResponse<RoomListItem[]>(response);
+}
+
+export async function deleteRoom(roomId: string): Promise<ActionResponse> {
+  const url = `${API_BASE_URL}/api/rooms/${roomId}`;
+  console.log(`[API SEND] DELETE ${url}`);
+  const response = await fetch(url, {
+    method: "DELETE",
+  });
+  return handleResponse<ActionResponse>(response);
 }
 
 // ============================================

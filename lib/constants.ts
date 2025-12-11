@@ -40,14 +40,14 @@ export const CHOICE_COLORS = {
 } as const;
 
 // ============================================
-// API & WebSocket
+// API & Polling
 // ============================================
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
-export const WS_BASE_URL =
-  process.env.NEXT_PUBLIC_WS_BASE_URL || "ws://localhost:8000/api";
+export const STATE_POLL_INTERVAL_MS = 1200; // 1.2s active polling
+export const STATE_POLL_IDLE_MS = 2000; // 延長間隔在 has_update=false 時使用
 
 // ============================================
 // Local Storage Keys
@@ -56,4 +56,5 @@ export const WS_BASE_URL =
 export const STORAGE_KEYS = {
   PLAYER_CONTEXT: "chicken_game_player_context",
   HOST_CONTEXT: "chicken_game_host_context",
+  PAYOFF_HISTORY: "chicken_game_payoff_history",
 } as const;

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createRoom } from "@/lib/api";
 import { saveHostContext } from "@/lib/utils";
 
@@ -77,6 +78,15 @@ export default function HostPage() {
           >
             {isCreating ? "建立中..." : "建立新房間"}
           </button>
+
+          <div className="mt-4">
+            <Link
+              href="/host/rooms"
+              className="block w-full text-center text-indigo-600 hover:text-indigo-700 font-medium transition"
+            >
+              房間管理
+            </Link>
+          </div>
         </div>
 
         <div className="mt-8 pt-6 border-t border-gray-200">

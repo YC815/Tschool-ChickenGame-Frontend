@@ -1,29 +1,25 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { createWebSocket } from "@/lib/websocket";
 import {
-  getRoomStatus,
-  startGame,
-  nextRound,
-  endGame,
   assignIndicators,
+  endGame,
   getGameSummary,
-  getCurrentRound,
+  getRoomState,
+  nextRound,
   publishRoundResults,
+  startGame,
 } from "@/lib/api";
+import {
+  INDICATOR_ASSIGNMENT_AFTER_ROUND,
+  STATE_POLL_IDLE_MS,
+  STATE_POLL_INTERVAL_MS,
+  TOTAL_ROUNDS,
+} from "@/lib/constants";
 import { loadHostContext } from "@/lib/utils";
-import { TOTAL_ROUNDS, INDICATOR_ASSIGNMENT_AFTER_ROUND } from "@/lib/constants";
-import type {
-  RoomStatusResponse,
-  GameSummaryResponse,
-  RoundCurrentResponse,
-} from "@/lib/types";
+import type { GameSummaryResponse, RoomStateData } from "@/lib/types";
 
-/**
- * Host 控制面板
- */
 export default function HostRoomPage({
   params,
 }: {
@@ -32,93 +28,130 @@ export default function HostRoomPage({
   const { roomId } = use(params);
   const router = useRouter();
 
-  const [roomStatus, setRoomStatus] = useState<RoomStatusResponse | null>(null);
-  const [currentRound, setCurrentRound] = useState<RoundCurrentResponse | null>(null);
+  const hostContext = loadHostContext();
+  const [roomState, setRoomState] = useState<RoomStateData | null>(null);
   const [summary, setSummary] = useState<GameSummaryResponse | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [actionProgress, setActionProgress] = useState({ submitted: 0, total: 0 });
+  const [pollError, setPollError] = useState("");
+  const versionRef = useRef(0);
 
-  const hostContext = loadHostContext();
+  useEffect(() => {
+    if (!hostContext) {
+      router.push("/host");
+    }
+  }, [hostContext, router]);
 
-  // 拉取房間狀態
-  const fetchRoomStatus = async () => {
-    if (!hostContext) return;
+  const fetchLatestState = useCallback(async () => {
     try {
-      const status = await getRoomStatus(hostContext.room_code);
-      setRoomStatus(status);
-
-      // 雙狀態檢查：只有 PLAYING 且 current_round > 0 才拉 round 詳情
-      if (status.status === "PLAYING" && status.current_round > 0) {
-        const round = await getCurrentRound(roomId);
-        setCurrentRound(round);
-      }
-
-      if (status.status === "FINISHED") {
-        const gameSummary = await getGameSummary(roomId);
-        setSummary(gameSummary);
+      const state = await getRoomState(roomId, 0);
+      if (state.data) {
+        versionRef.current = state.version;
+        setRoomState(state.data);
+        setPollError("");
       }
     } catch (err) {
-      console.error("Failed to fetch room status:", err);
+      const msg = err instanceof Error ? err.message : "無法取得房間狀態";
+      setPollError(msg);
     }
-  };
+  }, [roomId]);
 
-  // 開始遊戲
+  // 短輪詢 /state
+  useEffect(() => {
+    if (!hostContext) return;
+
+    let cancelled = false;
+    let timer: NodeJS.Timeout;
+    versionRef.current = 0;
+
+    const pollState = async () => {
+      if (cancelled) return;
+      try {
+        const state = await getRoomState(roomId, versionRef.current);
+        if (cancelled) return;
+        if (state.has_update && state.data) {
+          versionRef.current = state.version;
+          setRoomState(state.data);
+          setPollError("");
+        }
+        const delay = state.has_update
+          ? STATE_POLL_INTERVAL_MS
+          : STATE_POLL_IDLE_MS;
+        timer = setTimeout(pollState, delay);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "無法取得房間狀態";
+        setPollError(msg);
+        timer = setTimeout(pollState, STATE_POLL_IDLE_MS);
+      }
+    };
+
+    pollState();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [hostContext, roomId]);
+
+  // 取得 summary
+  useEffect(() => {
+    if (!roomState) return;
+    if (roomState.room.status !== "FINISHED" || summary) return;
+
+    const fetchSummary = async () => {
+      try {
+        const data = await getGameSummary(roomId);
+        setSummary(data);
+      } catch (err) {
+        console.error("Failed to fetch summary:", err);
+      }
+    };
+
+    fetchSummary();
+  }, [roomId, roomState, summary]);
+
   const handleStartGame = async () => {
-    console.log(`[Host] 🎮 Starting game for room: ${roomId}`);
     setIsProcessing(true);
     try {
       await startGame(roomId);
-      console.log(`[Host] ✅ Game started successfully`);
-      await fetchRoomStatus();
+      await fetchLatestState();
     } catch (err) {
-      console.error(`[Host] ❌ Failed to start game:`, err);
       alert(err instanceof Error ? err.message : "開始遊戲失敗");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // 公布結果（新增的關鍵步驟）
   const handlePublishResults = async () => {
-    if (!currentRound) return;
-    console.log(`[Host] 📢 Publishing results for round ${currentRound.round_number}`);
+    if (!roomState) return;
     setIsProcessing(true);
     try {
-      await publishRoundResults(roomId, currentRound.round_number);
-      console.log(`[Host] ✅ Results published successfully`);
-      await fetchRoomStatus();
+      await publishRoundResults(roomId, roomState.round.round_number);
+      await fetchLatestState();
     } catch (err) {
-      console.error(`[Host] ❌ Failed to publish results:`, err);
       alert(err instanceof Error ? err.message : "公布結果失敗");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // 下一輪
   const handleNextRound = async () => {
-    console.log(`[Host] ➡️ Starting next round`);
     setIsProcessing(true);
     try {
       await nextRound(roomId);
-      setActionProgress({ submitted: 0, total: 0 }); // 重置進度
-      console.log(`[Host] ✅ Next round started successfully`);
-      await fetchRoomStatus();
+      await fetchLatestState();
     } catch (err) {
-      console.error(`[Host] ❌ Failed to start next round:`, err);
       alert(err instanceof Error ? err.message : "開始下一輪失敗");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // 發放指示物
   const handleAssignIndicators = async () => {
     setIsProcessing(true);
     try {
       await assignIndicators(roomId);
+      await fetchLatestState();
       alert("指示物已發放！請通知學生查看手機");
-      await fetchRoomStatus();
     } catch (err) {
       alert(err instanceof Error ? err.message : "發放指示物失敗");
     } finally {
@@ -126,14 +159,12 @@ export default function HostRoomPage({
     }
   };
 
-  // 結束遊戲
   const handleEndGame = async () => {
     if (!confirm("確定要結束遊戲嗎？")) return;
-
     setIsProcessing(true);
     try {
       await endGame(roomId);
-      await fetchRoomStatus();
+      await fetchLatestState();
     } catch (err) {
       alert(err instanceof Error ? err.message : "結束遊戲失敗");
     } finally {
@@ -141,53 +172,7 @@ export default function HostRoomPage({
     }
   };
 
-  // WebSocket 事件處理
-  useEffect(() => {
-    if (!hostContext) {
-      router.push("/host");
-      return;
-    }
-
-    const websocket = createWebSocket(roomId);
-
-    websocket.on("ACTION_SUBMITTED", (data: unknown) => {
-      const { submitted, total } = data as { submitted: number; total: number };
-      console.log(`[Host] Action submitted: ${submitted}/${total}`);
-      setActionProgress({ submitted, total });
-    });
-
-    websocket.on("ROUND_READY", () => {
-      console.log("[Host] Round ready to publish");
-      fetchRoomStatus();
-    });
-
-    websocket.on("ROUND_ENDED", () => {
-      console.log("[Host] Round ended");
-      fetchRoomStatus();
-    });
-
-    websocket.on("GAME_ENDED", () => {
-      console.log("[Host] Game ended");
-      fetchRoomStatus();
-    });
-
-    websocket.connect();
-
-    return () => {
-      websocket.disconnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, hostContext, router]);
-
-  // 初始載入與定期更新
-  useEffect(() => {
-    fetchRoomStatus();
-    const interval = setInterval(fetchRoomStatus, 3000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (!hostContext || !roomStatus) {
+  if (!hostContext || !roomState) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <p className="text-gray-600">載入中...</p>
@@ -195,91 +180,108 @@ export default function HostRoomPage({
     );
   }
 
-  const isWaiting = roomStatus.status === "WAITING";
-  const isPlaying = roomStatus.status === "PLAYING";
-  const isFinished = roomStatus.status === "FINISHED";
-  const canStartGame = isWaiting && roomStatus.player_count >= 2 && roomStatus.player_count % 2 === 0;
+  const isWaiting = roomState.room.status === "WAITING";
+  const isPlaying = roomState.room.status === "PLAYING";
+  const isFinished = roomState.room.status === "FINISHED";
+  const round = roomState.round;
 
-  // 關鍵修正：根據 Round Status 決定可用按鈕
-  const canPublishResults = isPlaying && currentRound && currentRound.status === "READY_TO_PUBLISH";
-  const canNextRound = isPlaying && currentRound && currentRound.status === "COMPLETED" && currentRound.round_number < TOTAL_ROUNDS;
-  const canAssignIndicators = isPlaying && currentRound && currentRound.round_number === INDICATOR_ASSIGNMENT_AFTER_ROUND && currentRound.status === "COMPLETED";
+  const canStartGame =
+    isWaiting &&
+    roomState.room.player_count >= 2 &&
+    roomState.room.player_count % 2 === 0;
+  const canPublishResults = isPlaying && round?.status === "ready_to_publish";
+  const canNextRound =
+    isPlaying &&
+    round?.status === "completed" &&
+    round.round_number < TOTAL_ROUNDS;
+  const canAssignIndicators =
+    isPlaying &&
+    round?.status === "completed" &&
+    round.round_number === INDICATOR_ASSIGNMENT_AFTER_ROUND &&
+    !roomState.indicators_assigned;
+
+  const submissionPercent = round
+    ? Math.min(
+        (round.submitted_actions / Math.max(round.total_players, 1)) * 100,
+        100,
+      )
+    : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* 頂部資訊卡 */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="bg-white rounded-2xl shadow-lg p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* 房間代碼 */}
             <div className="text-center">
               <p className="text-sm text-gray-500 mb-2">房間代碼</p>
               <p className="text-5xl font-mono font-bold text-indigo-600 tracking-widest">
-                {roomStatus.code}
+                {roomState.room.code}
               </p>
             </div>
-
-            {/* 玩家人數 */}
             <div className="text-center">
               <p className="text-sm text-gray-500 mb-2">目前玩家數</p>
               <p className="text-5xl font-bold text-gray-800">
-                {roomStatus.player_count}
+                {roomState.room.player_count}
               </p>
-              {isWaiting && roomStatus.player_count % 2 !== 0 && (
+              {isWaiting && roomState.room.player_count % 2 !== 0 && (
                 <p className="text-sm text-orange-600 mt-2">
                   ⚠️ 玩家數必須為偶數
                 </p>
               )}
             </div>
-
-            {/* 當前狀態 */}
             <div className="text-center">
-              <p className="text-sm text-gray-500 mb-2">遊戲狀態</p>
+              <p className="text-sm text-gray-500 mb-2">狀態</p>
               <div className="text-2xl font-semibold">
                 {isWaiting && <span className="text-blue-600">等待中</span>}
-                {isPlaying && currentRound && (
+                {isPlaying && (
                   <span className="text-green-600">
-                    第 {currentRound.round_number} 輪
+                    第 {round?.round_number ?? roomState.room.current_round} 輪
                   </span>
                 )}
                 {isFinished && <span className="text-gray-600">已結束</span>}
               </div>
-              {isPlaying && currentRound && (
+              {isPlaying && round && (
                 <p className="text-sm text-gray-500 mt-2">
-                  狀態: {currentRound.status === "WAITING_ACTIONS" && "等待玩家提交"}
-                  {currentRound.status === "READY_TO_PUBLISH" && "準備公布結果"}
-                  {currentRound.status === "COMPLETED" && "已完成"}
+                  狀態:{" "}
+                  {round.status === "waiting_actions" && "等待玩家提交"}
+                  {round.status === "ready_to_publish" && "準備公布結果"}
+                  {round.status === "completed" && "已完成"}
                 </p>
               )}
             </div>
           </div>
+
+          {pollError && (
+            <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              {pollError}
+            </div>
+          )}
         </div>
 
-        {/* 進度條（玩家提交進度） */}
-        {isPlaying && currentRound && currentRound.status === "WAITING_ACTIONS" && actionProgress.total > 0 && (
-          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">玩家提交進度</h2>
+        {isPlaying && round && (
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">
+              玩家提交進度
+            </h2>
             <div className="flex items-center space-x-4">
               <div className="flex-1">
                 <div className="w-full bg-gray-200 rounded-full h-4">
                   <div
                     className="bg-green-500 h-4 rounded-full transition-all duration-300"
-                    style={{ width: `${(actionProgress.submitted / actionProgress.total) * 100}%` }}
+                    style={{ width: `${submissionPercent}%` }}
                   />
                 </div>
               </div>
               <div className="text-2xl font-bold text-gray-800">
-                {actionProgress.submitted} / {actionProgress.total}
+                {round.submitted_actions} / {round.total_players}
               </div>
             </div>
           </div>
         )}
 
-        {/* 控制按鈕區 */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+        <div className="bg-white rounded-2xl shadow-lg p-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4">控制面板</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* 開始遊戲 */}
             {isWaiting && (
               <button
                 onClick={handleStartGame}
@@ -290,7 +292,6 @@ export default function HostRoomPage({
               </button>
             )}
 
-            {/* 公布結果（新增的關鍵按鈕） */}
             {isPlaying && canPublishResults && (
               <button
                 onClick={handlePublishResults}
@@ -301,18 +302,20 @@ export default function HostRoomPage({
               </button>
             )}
 
-            {/* 下一輪 */}
             {isPlaying && (
               <button
                 onClick={handleNextRound}
                 disabled={!canNextRound || isProcessing}
                 className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white font-semibold py-4 rounded-lg transition shadow-md disabled:shadow-none"
               >
-                {canNextRound ? "開始下一輪" : currentRound && currentRound.round_number >= TOTAL_ROUNDS ? "已是最後一輪" : "等待完成本輪"}
+                {canNextRound
+                  ? "開始下一輪"
+                  : round && round.round_number >= TOTAL_ROUNDS
+                    ? "已是最後一輪"
+                    : "等待完成本輪"}
               </button>
             )}
 
-            {/* 發放指示物 */}
             {isPlaying && canAssignIndicators && (
               <button
                 onClick={handleAssignIndicators}
@@ -323,7 +326,6 @@ export default function HostRoomPage({
               </button>
             )}
 
-            {/* 結束遊戲 */}
             {isPlaying && (
               <button
                 onClick={handleEndGame}
@@ -335,7 +337,6 @@ export default function HostRoomPage({
             )}
           </div>
 
-          {/* 提示訊息 */}
           {isWaiting && (
             <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-800">
@@ -344,87 +345,103 @@ export default function HostRoomPage({
             </div>
           )}
 
-          {isPlaying && currentRound && (
+          {isPlaying && round && (
             <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
               <p className="text-sm text-green-800">
-                ✅ 遊戲進行中 - 第 {currentRound.round_number} 輪 / 共 {TOTAL_ROUNDS} 輪
+                ✅ 遊戲進行中 - 第 {round.round_number} 輪 / 共 {TOTAL_ROUNDS} 輪
               </p>
-              {currentRound.status === "WAITING_ACTIONS" && (
+              {round.status === "waiting_actions" && (
                 <p className="text-sm text-gray-700 mt-2">
                   ⏳ 等待所有玩家提交選擇...
                 </p>
               )}
-              {currentRound.status === "READY_TO_PUBLISH" && (
+              {round.status === "ready_to_publish" && (
                 <p className="text-sm text-purple-800 mt-2">
                   🎯 所有玩家已提交！請點擊「公布結果」按鈕
                 </p>
               )}
-              {currentRound.round_number === INDICATOR_ASSIGNMENT_AFTER_ROUND && currentRound.status === "COMPLETED" && (
+              {round.round_number === INDICATOR_ASSIGNMENT_AFTER_ROUND &&
+                round.status === "completed" &&
+                !roomState.indicators_assigned && (
+                  <p className="text-sm text-yellow-800 mt-2">
+                    ⚠️ 本輪結束後，請點擊「發放指示物」讓學生找到隊友
+                  </p>
+                )}
+              {roomState.indicators_assigned && (
                 <p className="text-sm text-yellow-800 mt-2">
-                  ⚠️ 本輪結束後，請點擊「發放指示物」讓學生找到隊友
+                  ✅ 指示物已發放
                 </p>
               )}
             </div>
           )}
         </div>
 
-        {/* 遊戲摘要（結束後顯示） */}
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-3">玩家列表</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {roomState.players.map((player) => (
+              <div
+                key={player.player_id}
+                className="border border-gray-200 rounded-lg p-3 flex items-center justify-between"
+              >
+                <div>
+                  <p className="font-semibold text-gray-800">
+                    {player.display_name}
+                  </p>
+                  {player.is_host && (
+                    <p className="text-xs text-indigo-600">Host</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {isFinished && summary && (
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-6">遊戲結果</h2>
-
-            {/* 策略統計 */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-700 mb-3">
-                整體策略分布
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
-                  <p className="text-sm text-gray-600 mb-1">加速比例</p>
-                  <p className="text-3xl font-bold text-red-600">
-                    {(summary.stats.accelerate_ratio * 100).toFixed(1)}%
-                  </p>
-                </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                  <p className="text-sm text-gray-600 mb-1">轉彎比例</p>
-                  <p className="text-3xl font-bold text-blue-600">
-                    {(summary.stats.turn_ratio * 100).toFixed(1)}%
-                  </p>
-                </div>
+            <div className="mb-6 grid grid-cols-2 gap-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                <p className="text-sm text-gray-600 mb-1">加速比例</p>
+                <p className="text-3xl font-bold text-red-600">
+                  {(summary.stats.accelerate_ratio * 100).toFixed(1)}%
+                </p>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                <p className="text-sm text-gray-600 mb-1">轉彎比例</p>
+                <p className="text-3xl font-bold text-blue-600">
+                  {(summary.stats.turn_ratio * 100).toFixed(1)}%
+                </p>
               </div>
             </div>
 
-            {/* 玩家排名 */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-700 mb-3">
-                玩家排名（依總分）
-              </h3>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {summary.players.map((player, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between bg-gray-50 rounded-lg p-4"
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="text-2xl font-bold text-gray-400">
-                        #{index + 1}
-                      </div>
-                      <div className="font-semibold text-gray-800">
-                        {player.display_name}
-                      </div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-3">
+              玩家排名（依總分）
+            </h3>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {summary.players.map((player, index) => (
+                <div
+                  key={player.display_name}
+                  className="flex items-center justify-between bg-gray-50 rounded-lg p-4"
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className="text-2xl font-bold text-gray-400">
+                      #{index + 1}
                     </div>
-                    <div className="text-2xl font-bold text-indigo-600">
-                      {player.total_payoff > 0 ? "+" : ""}
-                      {player.total_payoff}
+                    <div className="font-semibold text-gray-800">
+                      {player.display_name}
                     </div>
                   </div>
-                ))}
-              </div>
+                  <div className="text-2xl font-bold text-indigo-600">
+                    {player.total_payoff > 0 ? "+" : ""}
+                    {player.total_payoff}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* QR Code 區域（等待時顯示） */}
         {isWaiting && (
           <div className="bg-white rounded-2xl shadow-lg p-6 text-center">
             <h2 className="text-xl font-bold text-gray-800 mb-4">
@@ -434,7 +451,7 @@ export default function HostRoomPage({
               <p className="text-gray-600 mb-4">QR Code 或網址：</p>
               <p className="text-lg font-mono text-indigo-600">
                 {typeof window !== "undefined" &&
-                  `${window.location.origin}/join?code=${roomStatus.code}`}
+                  `${window.location.origin}/join?code=${roomState.room.code}`}
               </p>
               <p className="text-sm text-gray-500 mt-4">
                 （實際部署時可整合 QR Code 生成）

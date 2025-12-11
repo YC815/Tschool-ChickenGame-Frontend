@@ -13,27 +13,7 @@ export type RoomStatus = "WAITING" | "PLAYING" | "FINISHED";
 
 export type RoundPhase = "NORMAL" | "MESSAGE" | "INDICATOR";
 
-export type RoundStatus = "WAITING_ACTIONS" | "READY_TO_PUBLISH" | "COMPLETED";
-
-// ============================================
-// WebSocket Event Types
-// ============================================
-
-export type WSEventType =
-  | "ROOM_STARTED"
-  | "ROUND_STARTED"
-  | "ACTION_SUBMITTED"
-  | "ROUND_READY"
-  | "ROUND_ENDED"
-  | "MESSAGE_PHASE"
-  | "INDICATORS_ASSIGNED"
-  | "GAME_ENDED";
-
-export interface WSMessage {
-  event_type: WSEventType;
-  room_id: string;
-  data?: unknown;
-}
+export type RoundStatus = "waiting_actions" | "ready_to_publish" | "completed";
 
 // ============================================
 // API Request Types
@@ -107,7 +87,7 @@ export interface MessageResponse {
 }
 
 export interface IndicatorResponse {
-  symbol: string; // e.g., "🍋"
+  indicator_symbol: string | null; // e.g., "🍋"
 }
 
 export interface PlayerSummary {
@@ -125,8 +105,66 @@ export interface GameSummaryResponse {
   stats: GameStats;
 }
 
+export interface RoomListItem {
+  room_id: string;
+  code: string;
+  status: RoomStatus;
+  player_count: number;
+  created_at?: string;
+}
+
 export interface ActionResponse {
   status: "ok";
+}
+
+// ============================================
+// Polling State API
+// ============================================
+
+export interface RoomStateMessage {
+  round_number: number;
+  content: string;
+  from_player_id: string;
+  from_display_name: string;
+}
+
+export interface RoomStateRound {
+  round_number: number;
+  phase: RoundPhase;
+  status: RoundStatus;
+  submitted_actions: number;
+  total_players: number;
+  // 個人化欄位（只有帶 player_id 時才會有）
+  your_choice?: Choice | null;
+  opponent_choice?: Choice | null;
+  opponent_display_name?: string | null;
+  your_payoff?: number | null;
+  opponent_payoff?: number | null;
+}
+
+export interface RoomStateData {
+  room: {
+    room_id: string;
+    code: string;
+    status: RoomStatus;
+    current_round: number;
+    player_count: number; // 不含 host
+  };
+  players: Array<{
+    player_id: string;
+    display_name: string;
+    is_host: boolean;
+  }>;
+  round: RoomStateRound;
+  message?: string | RoomStateMessage | null;
+  indicator_symbol?: string | null;
+  indicators_assigned: boolean;
+}
+
+export interface RoomStateResponse {
+  version: number;
+  has_update: boolean;
+  data?: RoomStateData;
 }
 
 // ============================================
@@ -178,4 +216,17 @@ export interface HostContext {
   room_code: string;
   host_player_id: string;
   state: HostState;
+}
+
+// ============================================
+// Payoff History Types
+// ============================================
+
+/**
+ * 單輪收益記錄
+ */
+export interface PayoffRecord {
+  round_number: number;
+  payoff: number;
+  timestamp: number; // 用於除錯
 }
