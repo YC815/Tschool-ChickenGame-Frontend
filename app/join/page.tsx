@@ -42,8 +42,8 @@ export default function JoinPage() {
         state: "waiting_room",
       });
 
-      // 跳轉到等待室
-      router.push(`/room/${response.room_id}/waiting`);
+      // 跳轉到遊戲頁面
+      router.push(`/room/${response.room_id}/round`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "加入房間失敗");
       setIsJoining(false);

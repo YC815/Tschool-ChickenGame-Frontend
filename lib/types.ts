@@ -7,13 +7,13 @@
 // Enums（與後端完全對應）
 // ============================================
 
-export type Choice = "accelerate" | "turn";
+export type Choice = "ACCELERATE" | "TURN";
 
-export type RoomStatus = "waiting" | "playing" | "finished";
+export type RoomStatus = "WAITING" | "PLAYING" | "FINISHED";
 
-export type RoundPhase = "normal" | "message" | "indicator";
+export type RoundPhase = "NORMAL" | "MESSAGE" | "INDICATOR";
 
-export type RoundStatus = "waiting_actions" | "calculating" | "completed";
+export type RoundStatus = "WAITING_ACTIONS" | "READY_TO_PUBLISH" | "COMPLETED";
 
 // ============================================
 // WebSocket Event Types
@@ -22,6 +22,8 @@ export type RoundStatus = "waiting_actions" | "calculating" | "completed";
 export type WSEventType =
   | "ROOM_STARTED"
   | "ROUND_STARTED"
+  | "ACTION_SUBMITTED"
+  | "ROUND_READY"
   | "ROUND_ENDED"
   | "MESSAGE_PHASE"
   | "INDICATORS_ASSIGNED"

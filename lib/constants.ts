@@ -19,10 +19,10 @@ export const COOPERATION_ROUNDS = [7, 8, 9, 10]; // Round 7-10 可討論
 // ============================================
 
 export const PAYOFF_MATRIX = {
-  turn_turn: 3,
-  turn_accelerate: -3,
-  accelerate_turn: 10,
-  accelerate_accelerate: -10,
+  TURN_TURN: 3,
+  TURN_ACCELERATE: -3,
+  ACCELERATE_TURN: 10,
+  ACCELERATE_ACCELERATE: -10,
 } as const;
 
 // ============================================
@@ -30,13 +30,13 @@ export const PAYOFF_MATRIX = {
 // ============================================
 
 export const CHOICE_LABELS = {
-  accelerate: "加速",
-  turn: "轉彎",
+  ACCELERATE: "加速",
+  TURN: "轉彎",
 } as const;
 
 export const CHOICE_COLORS = {
-  accelerate: "bg-red-500 hover:bg-red-600",
-  turn: "bg-blue-500 hover:bg-blue-600",
+  ACCELERATE: "bg-red-500 hover:bg-red-600",
+  TURN: "bg-blue-500 hover:bg-blue-600",
 } as const;
 
 // ============================================
@@ -47,7 +47,7 @@ export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 export const WS_BASE_URL =
-  process.env.NEXT_PUBLIC_WS_BASE_URL || "ws://localhost:8000";
+  process.env.NEXT_PUBLIC_WS_BASE_URL || "ws://localhost:8000/api";
 
 // ============================================
 // Local Storage Keys

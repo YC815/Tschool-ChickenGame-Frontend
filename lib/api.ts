@@ -37,9 +37,17 @@ export class APIError extends Error {
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const text = await response.text();
-    throw new APIError(response.status, text || response.statusText);
+    let message = response.statusText;
+    try {
+      const json = await response.json();
+      message = json.detail || JSON.stringify(json);
+    } catch {
+      // 不是 JSON，使用原始 statusText
+    }
+    console.error(`[API RECV] ❌ ${response.status} ${response.url}`, message);
+    throw new APIError(response.status, message);
   }
+  console.log(`[API RECV] ✅ ${response.status} ${response.url}`);
   return response.json();
 }
 
@@ -48,7 +56,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
 // ============================================
 
 export async function createRoom(data: RoomCreate = {}): Promise<RoomResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms`, {
+  const url = `${API_BASE_URL}/api/rooms`;
+  console.log(`[API SEND] POST ${url}`, data);
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -59,29 +69,34 @@ export async function createRoom(data: RoomCreate = {}): Promise<RoomResponse> {
 export async function getRoomStatus(
   code: string,
 ): Promise<RoomStatusResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${code}`);
+  const url = `${API_BASE_URL}/api/rooms/${code}`;
+  console.log(`[API SEND] GET ${url}`);
+  const response = await fetch(url);
   return handleResponse<RoomStatusResponse>(response);
 }
 
 export async function startGame(roomId: string): Promise<ActionResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/start`, {
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/start`;
+  console.log(`[API SEND] POST ${url}`);
+  const response = await fetch(url, {
     method: "POST",
   });
   return handleResponse<ActionResponse>(response);
 }
 
 export async function nextRound(roomId: string): Promise<ActionResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/rooms/${roomId}/rounds/next`,
-    {
-      method: "POST",
-    },
-  );
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/rounds/next`;
+  console.log(`[API SEND] POST ${url}`);
+  const response = await fetch(url, {
+    method: "POST",
+  });
   return handleResponse<ActionResponse>(response);
 }
 
 export async function endGame(roomId: string): Promise<ActionResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/end`, {
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/end`;
+  console.log(`[API SEND] POST ${url}`);
+  const response = await fetch(url, {
     method: "POST",
   });
   return handleResponse<ActionResponse>(response);
@@ -90,7 +105,9 @@ export async function endGame(roomId: string): Promise<ActionResponse> {
 export async function getGameSummary(
   roomId: string,
 ): Promise<GameSummaryResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/summary`);
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/summary`;
+  console.log(`[API SEND] GET ${url}`);
+  const response = await fetch(url);
   return handleResponse<GameSummaryResponse>(response);
 }
 
@@ -102,7 +119,9 @@ export async function joinRoom(
   code: string,
   data: PlayerJoin,
 ): Promise<PlayerResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms/${code}/join`, {
+  const url = `${API_BASE_URL}/api/rooms/${code}/join`;
+  console.log(`[API SEND] POST ${url}`, data);
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -117,9 +136,9 @@ export async function joinRoom(
 export async function getCurrentRound(
   roomId: string,
 ): Promise<RoundCurrentResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/rooms/${roomId}/rounds/current`,
-  );
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/rounds/current`;
+  console.log(`[API SEND] GET ${url}`);
+  const response = await fetch(url);
   return handleResponse<RoundCurrentResponse>(response);
 }
 
@@ -128,9 +147,9 @@ export async function getPlayerPair(
   roundNumber: number,
   playerId: string,
 ): Promise<PairResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/rooms/${roomId}/rounds/${roundNumber}/pair?player_id=${playerId}`,
-  );
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/rounds/${roundNumber}/pair?player_id=${playerId}`;
+  console.log(`[API SEND] GET ${url}`);
+  const response = await fetch(url);
   return handleResponse<PairResponse>(response);
 }
 
@@ -139,14 +158,25 @@ export async function submitAction(
   roundNumber: number,
   data: ActionSubmit,
 ): Promise<ActionResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/rooms/${roomId}/rounds/${roundNumber}/action`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    },
-  );
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/rounds/${roundNumber}/action`;
+  console.log(`[API SEND] POST ${url}`, data);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<ActionResponse>(response);
+}
+
+export async function publishRoundResults(
+  roomId: string,
+  roundNumber: number,
+): Promise<ActionResponse> {
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/rounds/${roundNumber}/publish`;
+  console.log(`[API SEND] POST ${url}`);
+  const response = await fetch(url, {
+    method: "POST",
+  });
   return handleResponse<ActionResponse>(response);
 }
 
@@ -155,9 +185,9 @@ export async function getRoundResult(
   roundNumber: number,
   playerId: string,
 ): Promise<RoundResultResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/rooms/${roomId}/rounds/${roundNumber}/result?player_id=${playerId}`,
-  );
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/rounds/${roundNumber}/result?player_id=${playerId}`;
+  console.log(`[API SEND] GET ${url}`);
+  const response = await fetch(url);
   return handleResponse<RoundResultResponse>(response);
 }
 
@@ -170,14 +200,13 @@ export async function sendMessage(
   roundNumber: number,
   data: MessageSubmit,
 ): Promise<ActionResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/rooms/${roomId}/rounds/${roundNumber}/message`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    },
-  );
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/rounds/${roundNumber}/message`;
+  console.log(`[API SEND] POST ${url}`, data);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
   return handleResponse<ActionResponse>(response);
 }
 
@@ -186,9 +215,9 @@ export async function getMessage(
   roundNumber: number,
   playerId: string,
 ): Promise<MessageResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/rooms/${roomId}/rounds/${roundNumber}/message?player_id=${playerId}`,
-  );
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/rounds/${roundNumber}/message?player_id=${playerId}`;
+  console.log(`[API SEND] GET ${url}`);
+  const response = await fetch(url);
   return handleResponse<MessageResponse>(response);
 }
 
@@ -199,12 +228,11 @@ export async function getMessage(
 export async function assignIndicators(
   roomId: string,
 ): Promise<ActionResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/rooms/${roomId}/indicators/assign`,
-    {
-      method: "POST",
-    },
-  );
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/indicators/assign`;
+  console.log(`[API SEND] POST ${url}`);
+  const response = await fetch(url, {
+    method: "POST",
+  });
   return handleResponse<ActionResponse>(response);
 }
 
@@ -212,8 +240,8 @@ export async function getPlayerIndicator(
   roomId: string,
   playerId: string,
 ): Promise<IndicatorResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/rooms/${roomId}/indicator?player_id=${playerId}`,
-  );
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/indicator?player_id=${playerId}`;
+  console.log(`[API SEND] GET ${url}`);
+  const response = await fetch(url);
   return handleResponse<IndicatorResponse>(response);
 }

@@ -8,14 +8,22 @@ import type { WSMessage, WSEventType } from "./types";
 
 type EventHandler = (data: unknown) => void;
 
+enum ConnectionState {
+  IDLE = "IDLE",
+  CONNECTING = "CONNECTING",
+  CONNECTED = "CONNECTED",
+  RECONNECTING = "RECONNECTING",
+  FAILED = "FAILED",
+}
+
 export class WebSocketManager {
   private ws: WebSocket | null = null;
   private handlers: Map<WSEventType, Set<EventHandler>> = new Map();
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 2000; // ms
-  private shouldReconnect = true;
+  private readonly maxReconnectAttempts = 5;
+  private readonly reconnectDelay = 2000; // ms
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private state: ConnectionState = ConnectionState.IDLE;
 
   constructor(private roomId: string) {}
 
@@ -23,12 +31,19 @@ export class WebSocketManager {
    * 連線到 WebSocket
    */
   connect(): void {
+    // 如果已經放棄重連，不再嘗試
+    if (this.hasGivenUp) {
+      return;
+    }
+
     const url = `${WS_BASE_URL}/ws/${this.roomId}`;
 
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
-      console.log("[WS] Connected");
+      if (this.reconnectAttempts > 0) {
+        console.log(`[WS] ✅ Reconnected to room ${this.roomId}`);
+      }
       this.reconnectAttempts = 0;
       this.startHeartbeat();
     };
@@ -47,22 +62,25 @@ export class WebSocketManager {
       }
     };
 
-    this.ws.onerror = (error) => {
-      console.error("[WS] Error:", error);
+    this.ws.onerror = () => {
+      // WebSocket error 細節會在 onclose 事件中處理
+      // 瀏覽器的 onerror 事件物件本身沒有有用訊息
     };
 
     this.ws.onclose = () => {
-      console.log("[WS] Disconnected");
       this.stopHeartbeat();
       this.ws = null;
 
-      // 自動重連
-      if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+      // 自動重連（靜默模式，除非真的失敗）
+      if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts && !this.hasGivenUp) {
         this.reconnectAttempts++;
-        console.log(
-          `[WS] Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
-        );
         setTimeout(() => this.connect(), this.reconnectDelay);
+      } else if (this.reconnectAttempts >= this.maxReconnectAttempts && !this.hasGivenUp) {
+        this.hasGivenUp = true;
+        console.error(
+          `[WS] ❌ Failed to reconnect to room ${this.roomId} after ${this.maxReconnectAttempts} attempts`,
+        );
+        console.error(`[WS] 🔌 WebSocket 伺服器可能沒有運行。請檢查後端是否啟動。`);
       }
     };
   }
@@ -92,7 +110,7 @@ export class WebSocketManager {
    * 斷線
    */
   disconnect(): void {
-    this.shouldReconnect = false;
+    this.state = ConnectionState.IDLE;
     this.stopHeartbeat();
     if (this.ws) {
       this.ws.close();
@@ -124,7 +142,7 @@ export class WebSocketManager {
    * 處理收到的訊息
    */
   private handleMessage(message: WSMessage): void {
-    console.log("[WS] Received:", message.event_type, message.data);
+    console.log(`[WS RECV] 📨 ${message.event_type}`, message.data);
 
     const handlers = this.handlers.get(message.event_type);
     if (handlers) {
@@ -136,7 +154,16 @@ export class WebSocketManager {
    * 檢查連線狀態
    */
   isConnected(): boolean {
-    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+    return this.state === ConnectionState.CONNECTED &&
+           this.ws !== null &&
+           this.ws.readyState === WebSocket.OPEN;
+  }
+
+  /**
+   * 取得目前連線狀態
+   */
+  getState(): ConnectionState {
+    return this.state;
   }
 }
 

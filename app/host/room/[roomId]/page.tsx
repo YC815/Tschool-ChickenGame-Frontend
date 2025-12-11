@@ -11,6 +11,7 @@ import {
   assignIndicators,
   getGameSummary,
   getCurrentRound,
+  publishRoundResults,
 } from "@/lib/api";
 import { loadHostContext } from "@/lib/utils";
 import { TOTAL_ROUNDS, INDICATOR_ASSIGNMENT_AFTER_ROUND } from "@/lib/constants";
@@ -35,6 +36,7 @@ export default function HostRoomPage({
   const [currentRound, setCurrentRound] = useState<RoundCurrentResponse | null>(null);
   const [summary, setSummary] = useState<GameSummaryResponse | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [actionProgress, setActionProgress] = useState({ submitted: 0, total: 0 });
 
   const hostContext = loadHostContext();
 
@@ -45,12 +47,13 @@ export default function HostRoomPage({
       const status = await getRoomStatus(hostContext.room_code);
       setRoomStatus(status);
 
-      if (status.status === "playing") {
+      // 雙狀態檢查：只有 PLAYING 且 current_round > 0 才拉 round 詳情
+      if (status.status === "PLAYING" && status.current_round > 0) {
         const round = await getCurrentRound(roomId);
         setCurrentRound(round);
       }
 
-      if (status.status === "finished") {
+      if (status.status === "FINISHED") {
         const gameSummary = await getGameSummary(roomId);
         setSummary(gameSummary);
       }
@@ -61,12 +64,32 @@ export default function HostRoomPage({
 
   // 開始遊戲
   const handleStartGame = async () => {
+    console.log(`[Host] 🎮 Starting game for room: ${roomId}`);
     setIsProcessing(true);
     try {
       await startGame(roomId);
+      console.log(`[Host] ✅ Game started successfully`);
       await fetchRoomStatus();
     } catch (err) {
+      console.error(`[Host] ❌ Failed to start game:`, err);
       alert(err instanceof Error ? err.message : "開始遊戲失敗");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 公布結果（新增的關鍵步驟）
+  const handlePublishResults = async () => {
+    if (!currentRound) return;
+    console.log(`[Host] 📢 Publishing results for round ${currentRound.round_number}`);
+    setIsProcessing(true);
+    try {
+      await publishRoundResults(roomId, currentRound.round_number);
+      console.log(`[Host] ✅ Results published successfully`);
+      await fetchRoomStatus();
+    } catch (err) {
+      console.error(`[Host] ❌ Failed to publish results:`, err);
+      alert(err instanceof Error ? err.message : "公布結果失敗");
     } finally {
       setIsProcessing(false);
     }
@@ -74,11 +97,15 @@ export default function HostRoomPage({
 
   // 下一輪
   const handleNextRound = async () => {
+    console.log(`[Host] ➡️ Starting next round`);
     setIsProcessing(true);
     try {
       await nextRound(roomId);
+      setActionProgress({ submitted: 0, total: 0 }); // 重置進度
+      console.log(`[Host] ✅ Next round started successfully`);
       await fetchRoomStatus();
     } catch (err) {
+      console.error(`[Host] ❌ Failed to start next round:`, err);
       alert(err instanceof Error ? err.message : "開始下一輪失敗");
     } finally {
       setIsProcessing(false);
@@ -123,6 +150,17 @@ export default function HostRoomPage({
 
     const websocket = createWebSocket(roomId);
 
+    websocket.on("ACTION_SUBMITTED", (data: unknown) => {
+      const { submitted, total } = data as { submitted: number; total: number };
+      console.log(`[Host] Action submitted: ${submitted}/${total}`);
+      setActionProgress({ submitted, total });
+    });
+
+    websocket.on("ROUND_READY", () => {
+      console.log("[Host] Round ready to publish");
+      fetchRoomStatus();
+    });
+
     websocket.on("ROUND_ENDED", () => {
       console.log("[Host] Round ended");
       fetchRoomStatus();
@@ -157,12 +195,15 @@ export default function HostRoomPage({
     );
   }
 
-  const isWaiting = roomStatus.status === "waiting";
-  const isPlaying = roomStatus.status === "playing";
-  const isFinished = roomStatus.status === "finished";
+  const isWaiting = roomStatus.status === "WAITING";
+  const isPlaying = roomStatus.status === "PLAYING";
+  const isFinished = roomStatus.status === "FINISHED";
   const canStartGame = isWaiting && roomStatus.player_count >= 2 && roomStatus.player_count % 2 === 0;
-  const canNextRound = isPlaying && currentRound && currentRound.round_number < TOTAL_ROUNDS;
-  const canAssignIndicators = isPlaying && currentRound && currentRound.round_number === INDICATOR_ASSIGNMENT_AFTER_ROUND;
+
+  // 關鍵修正：根據 Round Status 決定可用按鈕
+  const canPublishResults = isPlaying && currentRound && currentRound.status === "READY_TO_PUBLISH";
+  const canNextRound = isPlaying && currentRound && currentRound.status === "COMPLETED" && currentRound.round_number < TOTAL_ROUNDS;
+  const canAssignIndicators = isPlaying && currentRound && currentRound.round_number === INDICATOR_ASSIGNMENT_AFTER_ROUND && currentRound.status === "COMPLETED";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
@@ -203,9 +244,36 @@ export default function HostRoomPage({
                 )}
                 {isFinished && <span className="text-gray-600">已結束</span>}
               </div>
+              {isPlaying && currentRound && (
+                <p className="text-sm text-gray-500 mt-2">
+                  狀態: {currentRound.status === "WAITING_ACTIONS" && "等待玩家提交"}
+                  {currentRound.status === "READY_TO_PUBLISH" && "準備公布結果"}
+                  {currentRound.status === "COMPLETED" && "已完成"}
+                </p>
+              )}
             </div>
           </div>
         </div>
+
+        {/* 進度條（玩家提交進度） */}
+        {isPlaying && currentRound && currentRound.status === "WAITING_ACTIONS" && actionProgress.total > 0 && (
+          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">玩家提交進度</h2>
+            <div className="flex items-center space-x-4">
+              <div className="flex-1">
+                <div className="w-full bg-gray-200 rounded-full h-4">
+                  <div
+                    className="bg-green-500 h-4 rounded-full transition-all duration-300"
+                    style={{ width: `${(actionProgress.submitted / actionProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-gray-800">
+                {actionProgress.submitted} / {actionProgress.total}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 控制按鈕區 */}
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
@@ -222,6 +290,17 @@ export default function HostRoomPage({
               </button>
             )}
 
+            {/* 公布結果（新增的關鍵按鈕） */}
+            {isPlaying && canPublishResults && (
+              <button
+                onClick={handlePublishResults}
+                disabled={isProcessing}
+                className="bg-purple-500 hover:bg-purple-600 disabled:bg-gray-300 text-white font-semibold py-4 rounded-lg transition shadow-md disabled:shadow-none"
+              >
+                公布結果
+              </button>
+            )}
+
             {/* 下一輪 */}
             {isPlaying && (
               <button
@@ -229,7 +308,7 @@ export default function HostRoomPage({
                 disabled={!canNextRound || isProcessing}
                 className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white font-semibold py-4 rounded-lg transition shadow-md disabled:shadow-none"
               >
-                {canNextRound ? "開始下一輪" : "已是最後一輪"}
+                {canNextRound ? "開始下一輪" : currentRound && currentRound.round_number >= TOTAL_ROUNDS ? "已是最後一輪" : "等待完成本輪"}
               </button>
             )}
 
@@ -270,7 +349,17 @@ export default function HostRoomPage({
               <p className="text-sm text-green-800">
                 ✅ 遊戲進行中 - 第 {currentRound.round_number} 輪 / 共 {TOTAL_ROUNDS} 輪
               </p>
-              {currentRound.round_number === INDICATOR_ASSIGNMENT_AFTER_ROUND && (
+              {currentRound.status === "WAITING_ACTIONS" && (
+                <p className="text-sm text-gray-700 mt-2">
+                  ⏳ 等待所有玩家提交選擇...
+                </p>
+              )}
+              {currentRound.status === "READY_TO_PUBLISH" && (
+                <p className="text-sm text-purple-800 mt-2">
+                  🎯 所有玩家已提交！請點擊「公布結果」按鈕
+                </p>
+              )}
+              {currentRound.round_number === INDICATOR_ASSIGNMENT_AFTER_ROUND && currentRound.status === "COMPLETED" && (
                 <p className="text-sm text-yellow-800 mt-2">
                   ⚠️ 本輪結束後，請點擊「發放指示物」讓學生找到隊友
                 </p>
