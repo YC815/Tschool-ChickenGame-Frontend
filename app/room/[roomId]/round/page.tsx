@@ -567,24 +567,13 @@ export default function RoundPage({
                 <p className="text-sm text-red-600">{messageError}</p>
               )}
 
-              <div className="flex gap-3">
-                <button
-                  onClick={handleSendMessage}
-                  disabled={!messageDraft.trim()}
-                  className="flex-1 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg transition shadow-md disabled:shadow-none"
-                >
-                  送出留言
-                </button>
-                <button
-                  onClick={() => {
-                    setMessageDraft("");
-                    setHasSentMessage(true);
-                  }}
-                  className="px-6 py-3 bg-white border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-semibold"
-                >
-                  跳過
-                </button>
-              </div>
+              <button
+                onClick={handleSendMessage}
+                disabled={!messageDraft.trim()}
+                className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg transition shadow-md disabled:shadow-none"
+              >
+                送出留言
+              </button>
             </div>
           )}
 

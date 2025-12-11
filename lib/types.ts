@@ -140,6 +140,12 @@ export interface RoomStateRound {
   opponent_display_name?: string | null;
   your_payoff?: number | null;
   opponent_payoff?: number | null;
+  // 玩家提交狀態（用於監控誰還沒提交）
+  player_submissions?: Array<{
+    player_id: string;
+    display_name: string;
+    submitted: boolean;
+  }>;
 }
 
 export interface RoomStateData {

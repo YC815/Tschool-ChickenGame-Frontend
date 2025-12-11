@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, use } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -172,6 +172,49 @@ export default function HostRoomPage({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // 判斷是否在回合中（等待玩家提交）
+  const isRoundActive = useMemo(() => {
+    if (!roomState?.round || roomState.round.status !== "waiting_actions") return false;
+    return roomState.round.submitted_actions < roomState.round.total_players;
+  }, [roomState?.round]);
+
+  // 處理玩家資料：過濾 Host、加入提交狀態、排序
+  const processedPlayers = useMemo(() => {
+    if (!roomState) return [];
+
+    // 建立提交狀態查詢表
+    const submissionMap = new Map(
+      roomState.round?.player_submissions?.map((s) => [s.player_id, s.submitted]) ?? []
+    );
+
+    // 過濾 Host + 加入提交狀態
+    const playersWithStatus = roomState.players
+      .filter((p) => !p.is_host)
+      .map((p) => ({
+        ...p,
+        submitted: submissionMap.get(p.player_id) ?? null,
+      }));
+
+    // 排序：回合中時未提交置頂
+    if (!isRoundActive) return playersWithStatus;
+
+    return [...playersWithStatus].sort((a, b) => {
+      const aSubmitted = a.submitted ?? true;
+      const bSubmitted = b.submitted ?? true;
+      if (aSubmitted === bSubmitted) return 0;
+      return aSubmitted ? 1 : -1;
+    });
+  }, [roomState, isRoundActive]);
+
+  // 顏色計算函數
+  const getCardStyle = (submitted: boolean | null) => {
+    if (!isRoundActive) return "bg-white border-gray-200";
+    if (submitted === null) return "bg-white border-gray-200";
+    return submitted
+      ? "bg-green-50 border-green-300"
+      : "bg-red-50 border-red-400";
   };
 
   if (!hostContext || !roomState) {
@@ -433,23 +476,34 @@ export default function HostRoomPage({
 
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <h2 className="text-xl font-bold text-gray-800 mb-3">玩家列表</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {roomState.players.map((player) => (
-              <div
-                key={player.player_id}
-                className="border border-gray-200 rounded-lg p-3 flex items-center justify-between"
-              >
-                <div>
-                  <p className="font-semibold text-gray-800">
-                    {player.display_name}
-                  </p>
-                  {player.is_host && (
-                    <p className="text-xs text-indigo-600">Host</p>
+          {processedPlayers.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">尚無玩家加入</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {processedPlayers.map((player) => (
+                <div
+                  key={player.player_id}
+                  className={`border-2 rounded-lg p-4 transition-colors ${getCardStyle(player.submitted)}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-gray-800">
+                      {player.display_name}
+                    </p>
+                    {isRoundActive && player.submitted !== null && (
+                      <span className="text-lg">
+                        {player.submitted ? "✅" : "⏳"}
+                      </span>
+                    )}
+                  </div>
+                  {isRoundActive && player.submitted !== null && (
+                    <p className="text-xs mt-1 text-gray-600">
+                      {player.submitted ? "已提交" : "等待中"}
+                    </p>
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {isFinished && summary && (

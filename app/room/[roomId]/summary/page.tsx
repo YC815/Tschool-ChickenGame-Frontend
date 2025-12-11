@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, useMemo, use } from "react";
 import { useRouter } from "next/navigation";
 import { getGameSummary } from "@/lib/api";
-import { loadPlayerContext, clearPlayerContext } from "@/lib/utils";
+import { loadPlayerContext, clearPlayerContext, loadPayoffHistory, getTotalPayoff } from "@/lib/utils";
 import type { GameSummaryResponse } from "@/lib/types";
 
 /**
@@ -20,6 +20,12 @@ export default function SummaryPage({
   const [summary, setSummary] = useState<GameSummaryResponse | null>(null);
 
   const playerContext = loadPlayerContext();
+
+  // 使用 useMemo 來載入收益歷史（避免重複計算）
+  const payoffHistory = useMemo(() => {
+    if (!playerContext) return [];
+    return loadPayoffHistory(roomId, playerContext.player_id);
+  }, [roomId, playerContext]);
 
   useEffect(() => {
     if (!playerContext) {
@@ -97,6 +103,51 @@ export default function SummaryPage({
             <p className="text-sm text-gray-600 text-center">
               你是 <span className="font-semibold text-emerald-600">{playerContext.display_name}</span>
             </p>
+          </div>
+        </div>
+
+        {/* 個人收益歷史 */}
+        <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-300 rounded-2xl shadow-xl p-6 mb-6">
+          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <span>📊</span>
+            <span>你的收益明細</span>
+          </h3>
+
+          <div className="bg-white rounded-xl p-6 mb-4 text-center">
+            <p className="text-sm text-gray-600 mb-2">總收益</p>
+            <p className="text-5xl font-bold text-green-600">
+              {getTotalPayoff(roomId, playerContext.player_id)}
+            </p>
+          </div>
+
+          <div className="bg-white rounded-xl p-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">歷史記錄</p>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {payoffHistory.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">尚無記錄</p>
+              ) : (
+                payoffHistory.map((record) => (
+                  <div
+                    key={record.round_number}
+                    className="flex items-center justify-between text-sm p-2 bg-gray-50 rounded"
+                  >
+                    <span className="text-gray-600">第 {record.round_number} 輪</span>
+                    <span
+                      className={`font-bold ${
+                        record.payoff > 0
+                          ? "text-green-600"
+                          : record.payoff < 0
+                            ? "text-red-600"
+                            : "text-gray-600"
+                      }`}
+                    >
+                      {record.payoff > 0 ? "+" : ""}
+                      {record.payoff}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
