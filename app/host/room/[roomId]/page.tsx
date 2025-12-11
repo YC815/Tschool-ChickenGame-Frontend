@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, use } from "react";
 import { useRouter } from "next/navigation";
+import { QRCodeSVG } from "qrcode.react";
 import {
   assignIndicators,
   endGame,
@@ -33,6 +34,7 @@ export default function HostRoomPage({
   const [summary, setSummary] = useState<GameSummaryResponse | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pollError, setPollError] = useState("");
+  const [isJoinSectionExpanded, setIsJoinSectionExpanded] = useState(true);
   const versionRef = useRef(0);
 
   useEffect(() => {
@@ -258,6 +260,59 @@ export default function HostRoomPage({
           )}
         </div>
 
+        {isWaiting && (
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <button
+              onClick={() => setIsJoinSectionExpanded(!isJoinSectionExpanded)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <h2 className="text-xl font-bold text-gray-800">
+                學生加入方式
+              </h2>
+              <svg
+                className={`w-6 h-6 text-gray-600 transition-transform ${isJoinSectionExpanded ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            {isJoinSectionExpanded && (
+              <div className="mt-4 text-center">
+                <div className="bg-gray-100 rounded-lg p-8 inline-block">
+                  {typeof window !== "undefined" && (
+                    <>
+                      <div className="mb-6">
+                        <QRCodeSVG
+                          value={`${window.location.origin}/join?code=${roomState.room.code}`}
+                          size={256}
+                          level="H"
+                          includeMargin={true}
+                          className="mx-auto bg-white p-4 rounded-lg"
+                        />
+                      </div>
+                      <p className="text-gray-600 mb-2">或直接輸入房間代碼：</p>
+                      <p className="text-4xl font-mono font-bold text-indigo-600 tracking-widest mb-4">
+                        {roomState.room.code}
+                      </p>
+                      <p className="text-sm text-gray-500 font-mono break-all">
+                        {`${window.location.origin}/join?code=${roomState.room.code}`}
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {isPlaying && round && (
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <h2 className="text-xl font-bold text-gray-800 mb-4">
@@ -438,24 +493,6 @@ export default function HostRoomPage({
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-        )}
-
-        {isWaiting && (
-          <div className="bg-white rounded-2xl shadow-lg p-6 text-center">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">
-              學生加入方式
-            </h2>
-            <div className="bg-gray-100 rounded-lg p-8 inline-block">
-              <p className="text-gray-600 mb-4">QR Code 或網址：</p>
-              <p className="text-lg font-mono text-indigo-600">
-                {typeof window !== "undefined" &&
-                  `${window.location.origin}/join?code=${roomState.room.code}`}
-              </p>
-              <p className="text-sm text-gray-500 mt-4">
-                （實際部署時可整合 QR Code 生成）
-              </p>
             </div>
           </div>
         )}

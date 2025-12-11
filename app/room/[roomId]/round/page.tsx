@@ -19,6 +19,13 @@ import {
   STATE_POLL_INTERVAL_MS,
 } from "@/lib/constants";
 import type { Choice, RoomStateData, RoundResultResponse, PayoffRecord } from "@/lib/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function normalizeRoomMessage(
   message: RoomStateData["message"],
@@ -51,6 +58,7 @@ function normalizeRoomMessage(
 type GameState =
   | "waiting_game_start"
   | "waiting_round"
+  | "composing_message"
   | "choosing_action"
   | "waiting_result"
   | "showing_result";
@@ -79,6 +87,8 @@ export default function RoundPage({
   const [pollError, setPollError] = useState("");
   const [indicatorSymbol, setIndicatorSymbol] = useState<string | null>(null);
   const [payoffHistory, setPayoffHistory] = useState<PayoffRecord[]>([]);
+  const [showIndicatorDialog, setShowIndicatorDialog] = useState(false);
+  const [hasSeenIndicator, setHasSeenIndicator] = useState(false);
 
   // 引導沒有 player context 的使用者回到加入頁
   useEffect(() => {
@@ -92,6 +102,13 @@ export default function RoundPage({
     if (!playerContext) return;
     const history = loadPayoffHistory(roomId, playerContext.player_id);
     setPayoffHistory(history);
+  }, [roomId, playerContext]);
+
+  // 檢查是否已看過指示物
+  useEffect(() => {
+    if (!playerContext) return;
+    const seen = localStorage.getItem(`indicator_seen_${roomId}_${playerContext.player_id}`);
+    setHasSeenIndicator(seen === 'true');
   }, [roomId, playerContext]);
 
   // 短輪詢 /state
@@ -229,6 +246,13 @@ export default function RoundPage({
     setPayoffHistory(updated);
   }, [result, resultRound, roomId, playerContext]);
 
+  // 當指示物首次出現時顯示彈出視窗
+  useEffect(() => {
+    if (indicatorSymbol && !hasSeenIndicator) {
+      setShowIndicatorDialog(true);
+    }
+  }, [indicatorSymbol, hasSeenIndicator]);
+
   const hasSubmitted = useMemo(() => {
     if (pendingChoice) return true;
     if (!roomState || !roomState.round) return false;
@@ -241,6 +265,10 @@ export default function RoundPage({
 
     const roundStatus = roomState.round.status;
     if (roundStatus === "waiting_actions") {
+      // 優先檢查是否需要留言階段
+      if (shouldShowMessagePrompt(roomState.round.round_number) && !hasSentMessage) {
+        return "composing_message";
+      }
       return hasSubmitted ? "waiting_result" : "choosing_action";
     }
     if (roundStatus === "ready_to_publish") return "waiting_result";
@@ -250,7 +278,7 @@ export default function RoundPage({
         : "waiting_result";
     }
     return "waiting_round";
-  }, [hasSubmitted, result, resultRound, roomState]);
+  }, [hasSubmitted, hasSentMessage, result, resultRound, roomState]);
 
   const roundPhaseDesc = roomState?.round
     ? getRoundPhaseDescription(roomState.round.round_number)
@@ -258,22 +286,13 @@ export default function RoundPage({
   const showCoopHint = roomState?.round
     ? shouldShowCooperationHint(roomState.round.round_number)
     : false;
-  const canSendMessage =
-    roomState?.round &&
-    shouldShowMessagePrompt(roomState.round.round_number) &&
-    !hasSentMessage;
   const choiceToShow = roomState?.round?.your_choice ?? pendingChoice;
-  const opponentName = roomState?.round?.opponent_display_name ?? "對手";
   const submissionProgress = roomState?.round
     ? {
         submitted: roomState.round.submitted_actions,
         total: roomState.round.total_players,
       }
     : { submitted: 0, total: 0 };
-  const {
-    text: roundMessageText,
-    fromDisplayName: roundMessageSender,
-  } = normalizeRoomMessage(roomState?.message);
 
   const handleChoice = async (choice: Choice) => {
     if (!playerContext || !roomState || !roomState.round || hasSubmitted || isSubmitting) return;
@@ -308,6 +327,13 @@ export default function RoundPage({
       const msg = err instanceof Error ? err.message : "發送訊息失敗";
       setMessageError(msg);
     }
+  };
+
+  const handleCloseIndicatorDialog = () => {
+    if (!playerContext) return;
+    setShowIndicatorDialog(false);
+    setHasSeenIndicator(true);
+    localStorage.setItem(`indicator_seen_${roomId}_${playerContext.player_id}`, 'true');
   };
 
   if (!playerContext) {
@@ -414,6 +440,34 @@ export default function RoundPage({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-purple-100 p-4">
+      {/* 指示物彈出視窗 */}
+      <Dialog open={showIndicatorDialog} onOpenChange={handleCloseIndicatorDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-2xl text-center">你的指示物已發放！</DialogTitle>
+            <DialogDescription className="text-center text-lg font-semibold text-orange-600">
+              尋找對手！找到跟自己相同指示物的人配對
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-6 py-6">
+            <div className="text-9xl animate-bounce">{indicatorSymbol}</div>
+            <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+              <p className="text-center text-gray-800 font-medium">
+                請找到與你相同指示物的同學，從第 7 輪開始可討論後各自作答。
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-center pt-4">
+            <button
+              onClick={handleCloseIndicatorDialog}
+              className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-8 rounded-lg transition shadow-lg"
+            >
+              我知道了
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="max-w-2xl mx-auto">
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
           <div className="flex items-start justify-between gap-4">
@@ -442,14 +496,28 @@ export default function RoundPage({
             </div>
           </div>
 
-          {roundMessageText && (
-            <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-sm text-blue-800">
-                {roundMessageSender ? `${roundMessageSender}：` : "對手留言："}
-                {roundMessageText}
-              </p>
+          {/* 進度條 */}
+          <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+              <span>已提交</span>
+              <span>
+                {submissionProgress.submitted} / {submissionProgress.total}
+              </span>
             </div>
-          )}
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all duration-300 ${
+                  hasSubmitted ? "bg-green-500" : "bg-purple-500"
+                }`}
+                style={{
+                  width: `${Math.min(
+                    (submissionProgress.submitted / Math.max(submissionProgress.total, 1)) * 100,
+                    100,
+                  )}%`,
+                }}
+              />
+            </div>
+          </div>
 
           {pollError && (
             <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
@@ -458,7 +526,68 @@ export default function RoundPage({
           )}
         </div>
 
+        {/* 對方留言卡片 - 只在留言輪的決策階段顯示 */}
+        {roomState?.round &&
+         shouldShowMessagePrompt(roomState.round.round_number) &&
+         (derivedGameState === "choosing_action" || derivedGameState === "waiting_result") && (
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl shadow-lg p-6 mb-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-3">對方的留言</h3>
+            {receivedMessage ? (
+              <p className="text-gray-800">{receivedMessage}</p>
+            ) : (
+              <p className="text-gray-500">等待對方輸入中...</p>
+            )}
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl shadow-lg p-8">
+          {derivedGameState === "composing_message" && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-gray-800 text-center mb-4">給對方留言</h2>
+              <p className="text-sm text-gray-600 text-center mb-6">
+                你可以留言給對方（可選），留言後才能進入決策階段
+              </p>
+
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                留言內容（最多 100 字）
+              </label>
+              <textarea
+                value={messageDraft}
+                onChange={(e) => setMessageDraft(e.target.value)}
+                maxLength={100}
+                rows={4}
+                className="w-full px-4 py-3 border-2 border-amber-200 rounded-lg focus:border-amber-500 focus:ring focus:ring-amber-200 transition resize-none bg-white"
+                placeholder="寫下一句話..."
+              />
+              <div className="flex items-center justify-between text-sm text-gray-500">
+                <span>{messageDraft.length} / 100</span>
+              </div>
+
+              {messageError && (
+                <p className="text-sm text-red-600">{messageError}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!messageDraft.trim()}
+                  className="flex-1 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg transition shadow-md disabled:shadow-none"
+                >
+                  送出留言
+                </button>
+                <button
+                  onClick={() => {
+                    setMessageDraft("");
+                    setHasSentMessage(true);
+                  }}
+                  className="px-6 py-3 bg-white border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-semibold"
+                >
+                  跳過
+                </button>
+              </div>
+            </div>
+          )}
+
           {derivedGameState === "waiting_round" && (
             <div className="text-center py-10">
               <div className="w-16 h-16 bg-purple-500 rounded-full mx-auto flex items-center justify-center mb-4">
@@ -488,34 +617,7 @@ export default function RoundPage({
 
           {derivedGameState === "choosing_action" && (
             <div className="space-y-6">
-              <div className="text-center">
-                <p className="text-gray-600 mb-2">你的對手是</p>
-                <p className="text-2xl font-bold text-gray-800">
-                  {opponentName}
-                </p>
-              </div>
-
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between text-sm text-gray-600">
-                  <span>已提交</span>
-                  <span>
-                    {submissionProgress.submitted} / {submissionProgress.total}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                  <div
-                    className="bg-purple-500 h-2 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min(
-                        (submissionProgress.submitted / Math.max(submissionProgress.total, 1)) * 100,
-                        100,
-                      )}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="border-t border-gray-200 pt-6">
+              <div>
                 <p className="text-center text-gray-700 mb-6 font-medium">
                   選擇你的策略：
                 </p>
@@ -542,60 +644,38 @@ export default function RoundPage({
           )}
 
           {derivedGameState === "waiting_result" && (
-            <div className="space-y-6">
-              <div className="text-center py-6">
-                <div className="w-16 h-16 bg-blue-500 rounded-full mx-auto flex items-center justify-center mb-4">
-                  <svg
-                    className="w-8 h-8 text-white animate-pulse"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                </div>
-                <p className="text-gray-700 font-medium">
-                  {roomState.round.status === "waiting_actions" && "已提交，等待其他玩家..."}
-                  {roomState.round.status === "ready_to_publish" && "所有玩家已提交，等待老師公布結果..."}
-                  {roomState.round.status === "completed" && "取得結果中..."}
-                </p>
-                {choiceToShow && (
-                  <p className="text-sm text-gray-500 mt-2">
-                    你的選擇：{CHOICE_LABELS[choiceToShow]}
-                  </p>
-                )}
-              </div>
-
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between text-sm text-gray-600">
-                  <span>已提交</span>
-                  <span>
-                    {submissionProgress.submitted} / {submissionProgress.total}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                  <div
-                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min(
-                        (submissionProgress.submitted / Math.max(submissionProgress.total, 1)) * 100,
-                        100,
-                      )}%`,
-                    }}
+            <div className="text-center py-6">
+              <div className="w-16 h-16 bg-blue-500 rounded-full mx-auto flex items-center justify-center mb-4">
+                <svg
+                  className="w-8 h-8 text-white animate-pulse"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
                   />
-                </div>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
               </div>
+              <p className="text-gray-700 font-medium">
+                {roomState.round.status === "waiting_actions" && "已提交，等待其他玩家..."}
+                {roomState.round.status === "ready_to_publish" && "所有玩家已提交，等待老師公布結果..."}
+                {roomState.round.status === "completed" && "取得結果中..."}
+              </p>
+              {choiceToShow && (
+                <p className="text-sm text-gray-500 mt-2">
+                  你的選擇：{CHOICE_LABELS[choiceToShow]}
+                </p>
+              )}
             </div>
           )}
 
@@ -605,9 +685,6 @@ export default function RoundPage({
                 <h2 className="text-2xl font-bold text-gray-800 mb-4">
                   本輪結果
                 </h2>
-                <p className="text-gray-600">
-                  你的對手：{result.opponent_display_name}
-                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -647,107 +724,50 @@ export default function RoundPage({
           )}
         </div>
 
-        {derivedGameState === "showing_result" && result && playerContext && (
-          <div className="mt-6 bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-300 rounded-2xl shadow-lg p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <span>📊</span>
-              <span>你的累積收益</span>
-            </h3>
+        {/* 收益記錄 - 永遠可見 */}
+        <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-300 rounded-2xl shadow-lg p-6 mb-6">
+          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <span>📊</span>
+            <span>你的累積收益</span>
+          </h3>
 
-            <div className="bg-white rounded-xl p-6 mb-4 text-center">
-              <p className="text-sm text-gray-600 mb-2">總收益</p>
-              <p className="text-5xl font-bold text-green-600">
-                {getTotalPayoff(roomId, playerContext.player_id)}
-              </p>
-            </div>
+          <div className="bg-white rounded-xl p-6 mb-4 text-center">
+            <p className="text-sm text-gray-600 mb-2">總收益</p>
+            <p className="text-5xl font-bold text-green-600">
+              {getTotalPayoff(roomId, playerContext.player_id)}
+            </p>
+          </div>
 
-            <div className="bg-white rounded-xl p-4">
-              <p className="text-sm font-semibold text-gray-700 mb-3">歷史記錄</p>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {payoffHistory.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4">尚無記錄</p>
-                ) : (
-                  payoffHistory.map((record) => (
-                    <div
-                      key={record.round_number}
-                      className="flex items-center justify-between text-sm p-2 bg-gray-50 rounded"
+          <div className="bg-white rounded-xl p-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">歷史記錄</p>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {payoffHistory.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">尚無記錄</p>
+              ) : (
+                payoffHistory.map((record) => (
+                  <div
+                    key={record.round_number}
+                    className="flex items-center justify-between text-sm p-2 bg-gray-50 rounded"
+                  >
+                    <span className="text-gray-600">第 {record.round_number} 輪</span>
+                    <span
+                      className={`font-bold ${
+                        record.payoff > 0
+                          ? "text-green-600"
+                          : record.payoff < 0
+                            ? "text-red-600"
+                            : "text-gray-600"
+                      }`}
                     >
-                      <span className="text-gray-600">第 {record.round_number} 輪</span>
-                      <span
-                        className={`font-bold ${
-                          record.payoff > 0
-                            ? "text-green-600"
-                            : record.payoff < 0
-                              ? "text-red-600"
-                              : "text-gray-600"
-                        }`}
-                      >
-                        {record.payoff > 0 ? "+" : ""}
-                        {record.payoff}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
+                      {record.payoff > 0 ? "+" : ""}
+                      {record.payoff}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-        )}
-
-        {canSendMessage && (
-          <div className="mt-6 bg-amber-50 border border-amber-200 rounded-2xl shadow p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-2">留言階段</h2>
-            {receivedMessage ? (
-              <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-1">對手給你的訊息</p>
-                <div className="bg-white border border-amber-200 rounded-lg p-3">
-                  <p className="text-gray-800">{receivedMessage}</p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-600 mb-3">
-                對手尚未留言，你仍可以留言給對方（僅第 5-6 輪）。
-              </p>
-            )}
-
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              留言給對手（可選）
-            </label>
-            <textarea
-              value={messageDraft}
-              onChange={(e) => setMessageDraft(e.target.value)}
-              maxLength={100}
-              rows={3}
-              className="w-full px-4 py-3 border-2 border-amber-200 rounded-lg focus:border-amber-500 focus:ring focus:ring-amber-200 transition resize-none bg-white"
-              placeholder="寫下一句話..."
-              disabled={hasSentMessage}
-            />
-            <div className="flex items-center justify-between mt-2 text-sm text-gray-500">
-              <span>{messageDraft.length} / 100</span>
-              {hasSentMessage && <span className="text-amber-700">已送出</span>}
-            </div>
-            {messageError && (
-              <p className="text-sm text-red-600 mt-2">{messageError}</p>
-            )}
-            <div className="mt-4 flex gap-3">
-              <button
-                onClick={handleSendMessage}
-                disabled={!messageDraft.trim() || hasSentMessage}
-                className="flex-1 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg transition shadow-md disabled:shadow-none"
-              >
-                送出留言
-              </button>
-              <button
-                onClick={() => {
-                  setMessageDraft("");
-                  setHasSentMessage(true);
-                }}
-                className="px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                跳過
-              </button>
-            </div>
-          </div>
-        )}
+        </div>
 
         {indicatorSymbol && (
           <div className="mt-6 bg-pink-50 border border-pink-200 rounded-2xl shadow p-6">
@@ -755,7 +775,10 @@ export default function RoundPage({
             <div className="flex items-center gap-4">
               <div className="text-6xl">{indicatorSymbol}</div>
               <div className="text-sm text-gray-700">
-                <p>請找到與你相同指示物的同學，從第 7 輪開始可以討論後再各自作答。</p>
+                <p className="font-semibold text-orange-600 mb-1">
+                  尋找對手！找到跟自己相同指示物的人配對
+                </p>
+                <p>從第 7 輪開始可與配對同學討論後再各自作答。</p>
               </div>
             </div>
           </div>
