@@ -30,13 +30,13 @@ export const PAYOFF_MATRIX = {
 // ============================================
 
 export const CHOICE_LABELS = {
-  ACCELERATE: "加速",
-  TURN: "轉彎",
+  ACCELERATE: "不道歉",
+  TURN: "道歉",
 } as const;
 
 export const CHOICE_COLORS = {
-  ACCELERATE: "bg-red-500 hover:bg-red-600",
-  TURN: "bg-blue-500 hover:bg-blue-600",
+  ACCELERATE: "bg-destructive hover:bg-destructive/90",
+  TURN: "bg-primary hover:bg-primary/90",
 } as const;
 
 // ============================================

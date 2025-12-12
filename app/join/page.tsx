@@ -55,7 +55,7 @@ function JoinFormWithParams() {
       <div>
         <label
           htmlFor="roomCode"
-          className="block text-sm font-medium text-gray-700 mb-2"
+          className="block text-sm font-medium text-card-foreground mb-2"
         >
           房間代碼
         </label>
@@ -66,7 +66,7 @@ function JoinFormWithParams() {
           onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
           placeholder="輸入 6 位代碼"
           maxLength={6}
-          className="w-full px-4 py-3 text-lg text-center font-mono tracking-widest border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring focus:ring-blue-200 transition uppercase"
+          className="w-full px-4 py-3 text-lg text-center font-mono tracking-widest border-2 border-input rounded-lg focus:border-primary focus:ring focus:ring-primary/20 transition uppercase"
           disabled={isJoining}
         />
       </div>
@@ -75,7 +75,7 @@ function JoinFormWithParams() {
       <div>
         <label
           htmlFor="nickname"
-          className="block text-sm font-medium text-gray-700 mb-2"
+          className="block text-sm font-medium text-card-foreground mb-2"
         >
           你的暱稱
         </label>
@@ -86,7 +86,7 @@ function JoinFormWithParams() {
           onChange={(e) => setNickname(e.target.value)}
           placeholder="輸入暱稱"
           maxLength={50}
-          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring focus:ring-blue-200 transition"
+          className="w-full px-4 py-3 border-2 border-input rounded-lg focus:border-primary focus:ring focus:ring-primary/20 transition"
           disabled={isJoining}
         />
       </div>
@@ -102,7 +102,7 @@ function JoinFormWithParams() {
       <button
         onClick={handleJoin}
         disabled={isJoining || !roomCode.trim() || !nickname.trim()}
-        className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg transition shadow-md disabled:shadow-none"
+        className="w-full bg-primary hover:bg-primary/90 disabled:bg-muted text-primary-foreground font-semibold py-3 rounded-lg transition shadow-md disabled:shadow-none"
       >
         {isJoining ? "加入中..." : "加入房間"}
       </button>
@@ -116,33 +116,33 @@ function JoinFormWithParams() {
  */
 export default function JoinPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2 text-center">
-          膽小鬼賽局
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+      <div className="w-full max-w-md bg-card rounded-2xl shadow-xl p-8">
+        <h1 className="text-3xl font-bold text-card-foreground mb-2 text-center">
+          膽小鬼賽局（社交版）
         </h1>
-        <p className="text-gray-600 mb-8 text-center">
+        <p className="text-muted-foreground mb-8 text-center">
           加入遊戲房間
         </p>
 
         <Suspense fallback={
           <div className="space-y-6">
             <div className="animate-pulse">
-              <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
-              <div className="h-12 bg-gray-200 rounded"></div>
+              <div className="h-4 bg-muted rounded w-24 mb-2"></div>
+              <div className="h-12 bg-muted rounded"></div>
             </div>
             <div className="animate-pulse">
-              <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
-              <div className="h-12 bg-gray-200 rounded"></div>
+              <div className="h-4 bg-muted rounded w-24 mb-2"></div>
+              <div className="h-12 bg-muted rounded"></div>
             </div>
-            <div className="h-12 bg-gray-200 rounded"></div>
+            <div className="h-12 bg-muted rounded"></div>
           </div>
         }>
           <JoinFormWithParams />
         </Suspense>
 
-        <div className="mt-8 pt-6 border-t border-gray-200">
-          <p className="text-sm text-gray-500 text-center">
+        <div className="mt-8 pt-6 border-t border-border">
+          <p className="text-sm text-muted-foreground text-center">
             沒有房號？請向老師索取 QR Code 或房間代碼
           </p>
         </div>
