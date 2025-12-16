@@ -56,5 +56,4 @@ export const STATE_POLL_IDLE_MS = 2000; // 延長間隔在 has_update=false 時�
 export const STORAGE_KEYS = {
   PLAYER_CONTEXT: "chicken_game_player_context",
   HOST_CONTEXT: "chicken_game_host_context",
-  PAYOFF_HISTORY: "chicken_game_payoff_history",
 } as const;

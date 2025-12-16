@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useMemo, use } from "react";
+import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { getGameSummary } from "@/lib/api";
-import { loadPlayerContext, clearPlayerContext, loadPayoffHistory, getTotalPayoff } from "@/lib/utils";
+import { loadPlayerContext, clearPlayerContext } from "@/lib/utils";
 import type { GameSummaryResponse } from "@/lib/types";
 
 /**
@@ -23,11 +23,6 @@ export default function SummaryPage({
 
   const playerContext = loadPlayerContext();
 
-  const payoffHistory = useMemo(() => {
-    if (!playerContext) return [];
-    return loadPayoffHistory(roomId, playerContext.player_id);
-  }, [roomId, playerContext]);
-
   useEffect(() => {
     if (!playerContext) {
       router.push("");
@@ -36,7 +31,7 @@ export default function SummaryPage({
 
     const fetchSummary = async () => {
       try {
-        const data = await getGameSummary(roomId);
+        const data = await getGameSummary(roomId, playerContext.player_id);
         setSummary(data);
         // 資料載入後，延遲一點點觸發動畫
         setTimeout(() => setAnimateReveal(true), 100);
@@ -69,7 +64,12 @@ export default function SummaryPage({
   const myRank = summary.players.findIndex(
     (p) => p.display_name === playerContext.display_name,
   );
-  const myScore = summary.players[myRank]?.total_payoff || 0;
+  const myScore =
+    summary.player_total_payoff ??
+    summary.players[myRank]?.total_payoff ??
+    0;
+
+  const payoffHistory = summary.player_history ?? [];
 
   // 根據排名決定徽章顏色
   const getRankColor = (rank: number) => {
@@ -179,22 +179,30 @@ export default function SummaryPage({
                   {payoffHistory.length === 0 ? (
                     <p className="text-white/40 text-center py-4 text-sm">沒有找到記錄</p>
                   ) : (
-                    payoffHistory.map((record) => (
+                    payoffHistory.map((record) => {
+                      const payoff = record.your_payoff ?? 0;
+                      const positive = payoff >= 0;
+                      const className =
+                        payoff > 0
+                          ? "text-green-400"
+                          : payoff < 0
+                            ? "text-red-400"
+                            : "text-gray-400";
+                      return (
                       <div
                         key={record.round_number}
                         className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors"
                       >
                         <span className="text-indigo-200 text-xs font-bold">第 {record.round_number} 輪</span>
                         <span
-                          className={`font-black font-mono ${
-                            record.payoff > 0 ? "text-green-400" : record.payoff < 0 ? "text-red-400" : "text-gray-400"
-                          }`}
+                          className={`font-black font-mono ${className}`}
                         >
-                          {record.payoff > 0 ? "+" : ""}
-                          {record.payoff}
+                          {positive && payoff > 0 ? "+" : ""}
+                          {payoff}
                         </span>
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
              </div>

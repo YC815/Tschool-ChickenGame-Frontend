@@ -1,7 +1,7 @@
-import type { PayoffRecord } from "@/lib/types";
+import type { PlayerRoundHistoryEntry } from "@/lib/types";
 
 interface PayoffSummaryProps {
-  payoffHistory: PayoffRecord[];
+  payoffHistory: PlayerRoundHistoryEntry[];
   totalPayoff: number;
 }
 
@@ -68,14 +68,20 @@ export function PayoffSummary({
                     </span>
                   </div>
                   
-                  <span
-                    className={`font-bold font-mono text-sm ${
-                      record.payoff >= 0 ? "text-emerald-400" : "text-red-400"
-                    }`}
-                  >
-                    {record.payoff >= 0 ? "+" : ""}
-                    {record.payoff}
-                  </span>
+                  {(() => {
+                    const payoff = record.your_payoff ?? 0;
+                    const positive = payoff >= 0;
+                    return (
+                      <span
+                        className={`font-bold font-mono text-sm ${
+                          positive ? "text-emerald-400" : "text-red-400"
+                        }`}
+                      >
+                        {positive && payoff > 0 ? "+" : ""}
+                        {payoff}
+                      </span>
+                    );
+                  })()}
                 </div>
               ))}
             </div>

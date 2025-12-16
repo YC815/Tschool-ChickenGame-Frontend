@@ -103,6 +103,8 @@ export interface GameStats {
 export interface GameSummaryResponse {
   players: PlayerSummary[];
   stats: GameStats;
+  player_history?: PlayerRoundHistoryEntry[] | null;
+  player_total_payoff?: number | null;
 }
 
 export interface RoomListItem {
@@ -148,6 +150,15 @@ export interface RoomStateRound {
   }>;
 }
 
+export interface PlayerRoundHistoryEntry {
+  round_number: number;
+  your_choice?: Choice | null;
+  opponent_choice?: Choice | null;
+  your_payoff?: number | null;
+  opponent_payoff?: number | null;
+  opponent_display_name?: string | null;
+}
+
 export interface RoomStateData {
   room: {
     room_id: string;
@@ -165,6 +176,8 @@ export interface RoomStateData {
   message?: string | RoomStateMessage | null;
   indicator_symbol?: string | null;
   indicators_assigned: boolean;
+  player_history?: PlayerRoundHistoryEntry[] | null;
+  player_total_payoff?: number | null;
 }
 
 export interface RoomStateResponse {
@@ -222,17 +235,4 @@ export interface HostContext {
   room_code: string;
   host_player_id: string;
   state: HostState;
-}
-
-// ============================================
-// Payoff History Types
-// ============================================
-
-/**
- * 單輪收益記錄
- */
-export interface PayoffRecord {
-  round_number: number;
-  payoff: number;
-  timestamp: number; // 用於除錯
 }

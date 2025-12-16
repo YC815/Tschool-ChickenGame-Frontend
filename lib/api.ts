@@ -121,8 +121,14 @@ export async function endGame(roomId: string): Promise<ActionResponse> {
 
 export async function getGameSummary(
   roomId: string,
+  playerId?: string,
 ): Promise<GameSummaryResponse> {
-  const url = `${API_BASE_URL}/api/rooms/${roomId}/summary`;
+  const params = new URLSearchParams();
+  if (playerId) {
+    params.set("player_id", playerId);
+  }
+  const query = params.toString();
+  const url = `${API_BASE_URL}/api/rooms/${roomId}/summary${query ? `?${query}` : ""}`;
   console.log(`[API SEND] GET ${url}`);
   const response = await fetch(url);
   return handleResponse<GameSummaryResponse>(response);

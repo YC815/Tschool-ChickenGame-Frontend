@@ -10,7 +10,6 @@ import type { Choice } from "@/lib/types";
 import { usePlayerContext } from "./hooks/usePlayerContext";
 import { useRoomStatePolling } from "./hooks/useRoomStatePolling";
 import { useGamePhase } from "./hooks/useGamePhase";
-import { usePayoffHistory } from "./hooks/usePayoffHistory";
 import { useIndicatorDialog } from "./hooks/useIndicatorDialog";
 
 // Components
@@ -46,12 +45,8 @@ export default function RoundPage({
     playerContext?.player_id ?? null
   );
 
-  const { payoffHistory, totalPayoff } = usePayoffHistory(
-    roomId,
-    playerContext?.player_id ?? null,
-    gamePhase.result?.your_payoff ?? null,
-    gamePhase.result ? gamePhase.resultRound : null
-  );
+  const payoffHistory = roomState?.player_history ?? [];
+  const totalPayoff = roomState?.player_total_payoff ?? 0;
 
   const indicatorSymbol = roomState?.indicators_assigned
     ? roomState.indicator_symbol ?? null
