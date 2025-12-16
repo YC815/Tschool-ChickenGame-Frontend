@@ -54,7 +54,7 @@ export default function SummaryPage({
       <div className="min-h-[100dvh] w-full bg-gradient-to-br from-indigo-600 via-purple-700 to-indigo-900 flex items-center justify-center">
         <div className="flex flex-col items-center">
           <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-white font-bold tracking-widest animate-pulse">不要等了直接關掉，沒有彩蛋！</p>
+          <p className="text-white font-bold tracking-widest animate-pulse">沒有彩蛋！</p>
         </div>
       </div>
     );
