@@ -50,7 +50,7 @@ export default function RoundPage({
     roomId,
     playerContext?.player_id ?? null,
     gamePhase.result?.your_payoff ?? null,
-    gamePhase.result ? roomState?.round.round_number ?? null : null
+    gamePhase.result ? gamePhase.resultRound : null
   );
 
   const indicatorSymbol = roomState?.indicators_assigned

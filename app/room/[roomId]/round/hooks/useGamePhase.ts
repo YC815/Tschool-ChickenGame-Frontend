@@ -24,6 +24,7 @@ interface GamePhaseState {
   pendingChoice: Choice | null;
   isSubmitting: boolean;
   result: RoundResultResponse | null;
+  resultRound: number | null;
   hasSentMessage: boolean;
   messageDraft: string;
   messageError: string;
@@ -160,6 +161,7 @@ export function useGamePhase(
     pendingChoice,
     isSubmitting,
     result,
+    resultRound,
     hasSentMessage,
     messageDraft,
     messageError,
