@@ -1,104 +1,256 @@
-import Link from "next/link";
+"use client";
 
-/**
- * 首頁 - 導航到玩家端或 Host 端
- */
-export default function Home() {
+import { Suspense, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { joinRoom } from "@/lib/api";
+import { savePlayerContext } from "@/lib/utils";
+
+// ----------------------------------------------------------------------
+// 開場動畫元件：6張照片滑落
+// ----------------------------------------------------------------------
+function IntroAnimation({ onComplete }: { onComplete: () => void }) {
+  const [mounted, setMounted] = useState(false);
+
+  // ▼▼▼ 修改這裡：填入你的圖片路徑 ▼▼▼
+  const cards = [
+    // src: 填入圖片路徑 (例如 "/avatars/1.png" 或 "https://example.com/1.jpg")
+    { src: "/avatars/1.png", rotate: "-rotate-6", left: "10%" },
+    { src: "/avatars/2.png", rotate: "rotate-12", left: "60%" },
+    { src: "/avatars/3.png", rotate: "-rotate-3", left: "30%" },
+    { src: "/avatars/4.png", rotate: "rotate-6", left: "70%" },
+    { src: "/avatars/5.png", rotate: "-rotate-12", left: "20%" },
+    { src: "/avatars/6.png", rotate: "rotate-3", left: "50%" },
+  ];
+
+  useEffect(() => {
+    // 觸發掉落動畫
+    const timer = setTimeout(() => setMounted(true), 100);
+    
+    // 動畫總時長後通知父元件結束 (例如 2.5秒)
+    const endTimer = setTimeout(() => {
+      onComplete();
+    }, 2800);
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(endTimer);
+    };
+  }, [onComplete]);
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted to-secondary p-4">
-      <div className="w-full max-w-4xl">
-        {/* 標題 */}
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-foreground mb-4">
-            膽小鬼賽局（社交版）
-          </h1>
-          <p className="text-xl text-muted-foreground">
-            多人互動賽局教學系統
-          </p>
-          <p className="text-muted-foreground mt-2">
-            Game Theory Teaching Platform
-          </p>
-        </div>
-
-        {/* 選項卡 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* 玩家端 */}
-          <Link href="/join">
-            <div className="bg-card rounded-2xl shadow-xl p-8 hover:shadow-2xl transition cursor-pointer group">
-              <div className="w-16 h-16 bg-primary rounded-full mx-auto flex items-center justify-center mb-4 group-hover:scale-110 transition">
-                <svg
-                  className="w-8 h-8 text-primary-foreground"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-                  />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-card-foreground text-center mb-3">
-                學生端
-              </h2>
-              <p className="text-muted-foreground text-center mb-4">
-                使用手機加入遊戲房間
-              </p>
-              <ul className="text-sm text-muted-foreground space-y-2">
-                <li>✓ 掃描 QR Code 或輸入房號</li>
-                <li>✓ 參與 10 輪賽局</li>
-                <li>✓ 與同學互動與討論</li>
-              </ul>
-            </div>
-          </Link>
-
-          {/* Host 端 */}
-          <Link href="/host">
-            <div className="bg-card rounded-2xl shadow-xl p-8 hover:shadow-2xl transition cursor-pointer group">
-              <div className="w-16 h-16 bg-accent rounded-full mx-auto flex items-center justify-center mb-4 group-hover:scale-110 transition">
-                <svg
-                  className="w-8 h-8 text-primary-foreground"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                  />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-card-foreground text-center mb-3">
-                教師端
-              </h2>
-              <p className="text-muted-foreground text-center mb-4">
-                在大螢幕控制遊戲流程
-              </p>
-              <ul className="text-sm text-muted-foreground space-y-2">
-                <li>✓ 建立房間與生成代碼</li>
-                <li>✓ 控制回合進行</li>
-                <li>✓ 查看即時統計與結果</li>
-              </ul>
-            </div>
-          </Link>
-        </div>
-
-        {/* 底部資訊 */}
-        <div className="mt-12 text-center">
-          <div className="bg-card/80 backdrop-blur rounded-lg p-6 inline-block">
-            <h3 className="text-sm font-semibold text-card-foreground mb-2">
-              關於此遊戲
-            </h3>
-            <p className="text-sm text-muted-foreground max-w-2xl">
-              社交版膽小鬼賽局模擬「吵架後誰先道歉」的情境：道歉可修補關係但有點失勢，不道歉則可能雙輸。
-              本系統讓學生透過實際參與，體驗策略選擇、信號傳遞與團隊協作，
-              從遊戲中學習經濟學與決策理論。
-            </p>
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-indigo-900 overflow-hidden pointer-events-none">
+      <h2 className={`text-white text-2xl font-bold mb-8 transition-opacity duration-1000 ${mounted ? 'opacity-100' : 'opacity-0'}`}>
+        最蝦趴的賽局正在載入...
+      </h2>
+      
+      <div className="relative w-full max-w-sm h-96">
+        {cards.map((card, index) => (
+          <div
+            key={index}
+            className={`absolute top-0 w-24 h-32 bg-white border-4 border-white shadow-xl rounded-lg ${card.rotate} transition-all duration-700 ease-out overflow-hidden`}
+            style={{
+              left: card.left,
+              transform: mounted 
+                ? `translateY(${10 + index * 15}px) translateX(-50%)` 
+                : `translateY(-120vh) translateX(-50%)`,
+              transitionDelay: `${index * 300}ms`,
+              opacity: mounted ? 1 : 0
+            }}
+          >
+            {/* ▼▼▼ 修改這裡：顯示圖片 ▼▼▼ */}
+            <img 
+              src={card.src} 
+              alt={`Character ${index + 1}`}
+              className="w-full h-full object-cover"
+            />
+             {/* ▲▲▲ 修改結束 ▲▲▲ */}
           </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// 表單元件
+// ----------------------------------------------------------------------
+function JoinFormWithParams() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlCode = searchParams.get("code") || "";
+
+  const [roomCode, setRoomCode] = useState(urlCode);
+  const [nickname, setNickname] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleJoin = async () => {
+    if (!roomCode.trim() || !nickname.trim()) {
+      setError("請輸入房號和暱稱");
+      return;
+    }
+
+    // 震動反饋 (若裝置支援)
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+
+    setIsJoining(true);
+    setError("");
+
+    try {
+      const response = await joinRoom(roomCode.trim(), {
+        nickname: nickname.trim(),
+      });
+
+      savePlayerContext({
+        player_id: response.player_id,
+        room_id: response.room_id,
+        display_name: response.display_name,
+        room_code: roomCode.trim(),
+        state: "waiting_room",
+      });
+
+      router.push(`/room/${response.room_id}/round`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加入房間失敗");
+      setIsJoining(false);
+      // 錯誤震動
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([100, 50, 100]);
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-6 w-full animate-in fade-in slide-in-from-bottom-8 duration-700">
+      {/* 房號輸入 */}
+      <div className="relative group">
+        <label
+          htmlFor="roomCode"
+          className="absolute -top-3 left-4 bg-white px-2 text-xs font-bold text-indigo-600 rounded-full shadow-sm z-10"
+        >
+          房號
+        </label>
+        <input
+          id="roomCode"
+          type="text"
+          value={roomCode}
+          onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+          placeholder="000000"
+          maxLength={6}
+          inputMode="text"
+          autoComplete="off"
+          className="w-full h-16 text-3xl text-center font-black tracking-[0.5em] text-indigo-900 border-4 border-indigo-100 rounded-2xl bg-white shadow-sm focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/20 focus:outline-none transition-all placeholder:text-gray-200 uppercase"
+          disabled={isJoining}
+        />
+      </div>
+
+      {/* 暱稱輸入 */}
+      <div className="relative group">
+        <label
+          htmlFor="nickname"
+          className="absolute -top-3 left-4 bg-white px-2 text-xs font-bold text-indigo-600 rounded-full shadow-sm z-10"
+        >
+          暱稱
+        </label>
+        <input
+          id="nickname"
+          type="text"
+          value={nickname}
+          onChange={(e) => setNickname(e.target.value)}
+          placeholder="燃燒吧！小宇宙"
+          maxLength={10}
+          className="w-full h-14 px-6 text-xl font-bold text-gray-700 border-4 border-indigo-100 rounded-2xl bg-white shadow-sm focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/20 focus:outline-none transition-all placeholder:text-gray-300"
+          disabled={isJoining}
+        />
+      </div>
+
+      {/* 錯誤訊息 */}
+      {error && (
+        <div className="bg-red-500/10 border-2 border-red-500 text-red-600 px-4 py-3 rounded-xl text-sm font-bold text-center animate-bounce">
+          {error}
+        </div>
+      )}
+
+      {/* 加入按鈕 - 遊戲風格按鈕 */}
+      <button
+        onClick={handleJoin}
+        disabled={isJoining || !roomCode.trim() || !nickname.trim()}
+        className="group relative w-full h-16 mt-4 touch-manipulation"
+      >
+        <div className={`absolute inset-0 bg-indigo-600 rounded-2xl transition-transform ${!isJoining && roomCode && nickname ? 'translate-y-2 group-active:translate-y-0' : 'translate-y-0 opacity-50'}`}></div>
+        <div className={`absolute inset-0 flex items-center justify-center bg-indigo-500 rounded-2xl transition-transform border-b-4 border-indigo-700 ${!isJoining && roomCode && nickname ? 'group-active:translate-y-2 group-active:border-b-0' : 'cursor-not-allowed opacity-80'}`}>
+          <span className="text-xl font-black text-white tracking-wider uppercase drop-shadow-md">
+            {isJoining ? "連線中..." : "等不及了！開始"}
+          </span>
+        </div>
+      </button>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// 主頁面
+// ----------------------------------------------------------------------
+export default function JoinPage() {
+  const [showIntro, setShowIntro] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+
+  const handleIntroComplete = () => {
+    // 漸漸隱藏動畫層，顯示表單層
+    setShowIntro(false);
+    setTimeout(() => setShowForm(true), 300); // 稍微延遲讓淡出更自然
+  };
+
+  return (
+    // 使用 min-h-[100dvh] 確保在手機瀏覽器上高度正確 (避免網址列遮擋)
+    <div className="min-h-[100dvh] w-full bg-gradient-to-br from-indigo-500 via-purple-600 to-indigo-800 flex flex-col items-center justify-center relative overflow-hidden">
+      
+      {/* 裝飾背景：動態光暈 */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[30%] bg-blue-500/20 rounded-full blur-[100px] animate-pulse"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[30%] bg-purple-500/20 rounded-full blur-[100px] animate-pulse delay-700"></div>
+      </div>
+
+      {/* 開場動畫層 */}
+      {showIntro && (
+        <div className={`absolute inset-0 z-50 transition-opacity duration-500 ${showForm ? 'opacity-0' : 'opacity-100'}`}>
+          <IntroAnimation onComplete={handleIntroComplete} />
+        </div>
+      )}
+
+      {/* 主要內容容器 */}
+      <div className={`w-full max-w-sm px-6 relative z-10 transition-all duration-700 transform ${showForm ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
+        
+        {/* Logo / 標題區 */}
+        <div className="text-center mb-10">
+          <div className="inline-block bg-white/20 backdrop-blur-md border border-white/30 rounded-full px-4 py-1 mb-4 shadow-lg">
+            <span className="text-xs font-bold text-white tracking-widest uppercase">因為經濟學的好，所以才能請千億大畫家</span>
+          </div>
+          <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-white/70 drop-shadow-sm leading-tight">
+            膽小鬼<br/>賽局
+          </h1>
+        </div>
+
+        {/* 卡片容器 */}
+        <div className="bg-white/90 backdrop-blur-xl rounded-[2rem] shadow-2xl shadow-indigo-900/50 p-6 md:p-8 border border-white/50">
+          <Suspense fallback={
+            <div className="space-y-6 animate-pulse">
+              <div className="h-16 bg-indigo-100/50 rounded-2xl"></div>
+              <div className="h-14 bg-indigo-100/50 rounded-2xl"></div>
+              <div className="h-16 bg-indigo-200/50 rounded-2xl mt-4"></div>
+            </div>
+          }>
+            <JoinFormWithParams />
+          </Suspense>
+        </div>
+
+        {/* 底部輔助文字 */}
+        <div className="mt-8 text-center">
+          <p className="text-xs text-indigo-200 font-medium opacity-80">
+            請掃描大螢幕 QR Code 獲取代碼
+          </p>
         </div>
       </div>
     </div>

@@ -97,7 +97,7 @@ export default function RoundPage({
 
     const emojiArray = Array.from(gamePhase.messageDraft.trim());
     if (emojiArray.length === 0 || emojiArray.length > 3) {
-      gamePhase.setMessageError("請輸入 1~3 個 emoji");
+      gamePhase.setMessageError("請輸入 1~3 個 Emoji");
       return;
     }
 
@@ -111,34 +111,44 @@ export default function RoundPage({
     } catch (err) {
       console.error("[Player] Send message failed:", err);
       gamePhase.setMessageError(
-        err instanceof Error ? err.message : "送出失敗，請重試"
+        err instanceof Error ? err.message : "傳送失敗，請重試"
       );
     }
   };
 
   // === 渲染邏輯 ===
 
+  // 1. 尚未取得玩家資訊
   if (!playerContext) return null;
 
+  // 2. 載入中 / 錯誤狀態 (套用手遊風格背景)
   if (!roomState) {
     return (
-      <LoadingView
-        playerContext={playerContext}
-        pollError={pollError}
-        onRetry={resetPolling}
-      />
+      <div className="min-h-[100dvh] w-full bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
+        <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 shadow-2xl w-full max-w-md">
+          <LoadingView
+            playerContext={playerContext}
+            pollError={pollError}
+            onRetry={resetPolling}
+          />
+        </div>
+      </div>
     );
   }
 
+  // 3. 等待遊戲開始 (Lobby)
   if (gamePhase.phase === "waiting_game_start") {
     return (
-      <WaitingStartView
-        roomState={roomState}
-        playerContext={playerContext}
-      />
+      <div className="min-h-[100dvh] w-full bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 p-4 flex flex-col items-center justify-center">
+        <WaitingStartView
+          roomState={roomState}
+          playerContext={playerContext}
+        />
+      </div>
     );
   }
 
+  // 計算邏輯
   const choiceToShow =
     gamePhase.pendingChoice ?? roomState.round.your_choice ?? null;
   const showCoopHint =
@@ -148,82 +158,122 @@ export default function RoundPage({
     roomState.round.round_number
   );
 
+  // 4. 主要遊戲畫面
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted p-4">
-      <div className="max-w-2xl mx-auto space-y-6 py-6">
-        <RoundHeader
-          roomState={roomState}
-          indicatorSymbol={indicatorSymbol}
-          onIndicatorClick={() =>
-            indicatorSymbol && closeDialog && closeDialog()
-          }
-        />
+    <div className="min-h-[100dvh] w-full bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 text-white overflow-x-hidden relative">
+      
+      {/* 背景動態裝飾 */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[30%] bg-blue-500/20 rounded-full blur-[100px] animate-pulse"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[30%] bg-purple-500/20 rounded-full blur-[100px] animate-pulse delay-700"></div>
+      </div>
 
-        <SubmissionProgress roomState={roomState} />
-
-        {indicatorSymbol && (
-          <IndicatorReminder
+      <div className="relative z-10 max-w-md mx-auto flex flex-col min-h-[100dvh] p-4 gap-4">
+        
+        {/* === 頂部 HUD (狀態欄) === */}
+        <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3 shadow-lg">
+          <RoundHeader
+            roomState={roomState}
             indicatorSymbol={indicatorSymbol}
-            onClick={() => closeDialog && closeDialog()}
+            onIndicatorClick={() =>
+              indicatorSymbol && closeDialog && closeDialog()
+            }
           />
-        )}
-
-        <div className="bg-card border-2 border-border rounded-2xl p-6 shadow-lg">
-          {gamePhase.phase === "composing_message" && (
-            <ComposingMessageView
-              messageDraft={gamePhase.messageDraft}
-              messageError={gamePhase.messageError}
-              onMessageChange={gamePhase.setMessageDraft}
-              onSubmit={handleMessageSubmit}
-            />
-          )}
-
-          {gamePhase.phase === "choosing_action" && (
-            <ChoosingActionView
-              isSubmitting={gamePhase.isSubmitting}
-              hasSubmitted={
-                gamePhase.pendingChoice !== null ||
-                roomState.round.your_choice !== null
-              }
-              onChoice={handleChoiceSubmit}
-              isMessageRound={isMessageRound}
-              myMessage={gamePhase.messageDraft || null}
-              opponentMessageStatus={gamePhase.opponentMessageStatus}
-              opponentMessage={gamePhase.opponentMessage}
-            />
-          )}
-
-          {gamePhase.phase === "waiting_result" && (
-            <WaitingResultView
-              roomState={roomState}
-              choiceToShow={choiceToShow}
-            />
-          )}
-
-          {gamePhase.phase === "showing_result" && gamePhase.result && (
-            <ShowingResultView result={gamePhase.result} />
-          )}
-
-          {gamePhase.phase === "waiting_round" && (
-            <div className="text-center py-6">
-              <p className="text-muted-foreground">等待下一輪開始...</p>
-            </div>
-          )}
+          <div className="mt-3">
+             <SubmissionProgress roomState={roomState} />
+          </div>
         </div>
 
+        {/* === 浮動提示區 === */}
+        {indicatorSymbol && (
+          <div className="animate-in slide-in-from-top-2 fade-in duration-500">
+             <IndicatorReminder
+                indicatorSymbol={indicatorSymbol}
+                onClick={() => closeDialog && closeDialog()}
+              />
+          </div>
+        )}
+
+        {/* === 提示訊息 (如：合作提示) === */}
         {showCoopHint && (
-          <div className="bg-purple-50 border-2 border-purple-300 rounded-xl p-4">
-            <p className="text-sm text-purple-800 text-center">
-              💡 提示：合作可能帶來更好的結果
+          <div className="bg-gradient-to-r from-purple-600/80 to-indigo-600/80 backdrop-blur-sm border border-purple-400/50 rounded-xl p-3 shadow-[0_0_15px_rgba(168,85,247,0.4)] animate-pulse">
+            <p className="text-sm font-bold text-white text-center flex items-center justify-center gap-2">
+              <span>💡</span>
+              <span className="tracking-wide text-shadow">提示：合作可能帶來更好的結果</span>
             </p>
           </div>
         )}
 
-        <PayoffSummary
-          payoffHistory={payoffHistory}
-          totalPayoff={totalPayoff}
-        />
+        {/* === 主要操作面板 (Game Console) === */}
+        {/* flex-1 確保它佔據中間主要空間 */}
+        <div className="flex-1 bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-5 shadow-2xl relative overflow-hidden flex flex-col justify-center">
+            
+            {/* 面板內部光影 */}
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
 
+            {/* 根據狀態顯示不同視圖 */}
+            {gamePhase.phase === "composing_message" && (
+              <div className="animate-in zoom-in-95 duration-300">
+                <ComposingMessageView
+                  messageDraft={gamePhase.messageDraft}
+                  messageError={gamePhase.messageError}
+                  onMessageChange={gamePhase.setMessageDraft}
+                  onSubmit={handleMessageSubmit}
+                />
+              </div>
+            )}
+
+            {gamePhase.phase === "choosing_action" && (
+              <div className="animate-in zoom-in-95 duration-300">
+                <ChoosingActionView
+                  isSubmitting={gamePhase.isSubmitting}
+                  hasSubmitted={
+                    gamePhase.pendingChoice !== null ||
+                    roomState.round.your_choice !== null
+                  }
+                  onChoice={handleChoiceSubmit}
+                  isMessageRound={isMessageRound}
+                  myMessage={gamePhase.messageDraft || null}
+                  opponentMessageStatus={gamePhase.opponentMessageStatus}
+                  opponentMessage={gamePhase.opponentMessage}
+                />
+              </div>
+            )}
+
+            {gamePhase.phase === "waiting_result" && (
+              <div className="animate-in fade-in duration-500">
+                <WaitingResultView
+                  roomState={roomState}
+                  choiceToShow={choiceToShow}
+                />
+              </div>
+            )}
+
+            {gamePhase.phase === "showing_result" && gamePhase.result && (
+              <div className="animate-in zoom-in-95 duration-300">
+                <ShowingResultView result={gamePhase.result} />
+              </div>
+            )}
+
+            {gamePhase.phase === "waiting_round" && (
+              <div className="text-center py-10 animate-pulse">
+                <div className="text-4xl mb-4">⏳</div>
+                <p className="text-indigo-200 text-lg font-bold tracking-widest">
+                  準備下一回合...
+                </p>
+              </div>
+            )}
+        </div>
+
+        {/* === 底部狀態欄 (Player Stats) === */}
+        <div className="bg-black/20 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden shadow-lg mt-auto">
+           <PayoffSummary
+            payoffHistory={payoffHistory}
+            totalPayoff={totalPayoff}
+          />
+        </div>
+
+        {/* === 彈出視窗 (Dialog) === */}
         {indicatorSymbol && (
           <IndicatorDialog
             isOpen={showDialog}

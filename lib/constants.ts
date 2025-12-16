@@ -44,7 +44,7 @@ export const CHOICE_COLORS = {
 // ============================================
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://0.0.0.0:8000";
 
 export const STATE_POLL_INTERVAL_MS = 1200; // 1.2s active polling
 export const STATE_POLL_IDLE_MS = 2000; // 延長間隔在 has_update=false 時使用
