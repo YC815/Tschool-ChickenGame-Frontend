@@ -36,23 +36,6 @@ function BackgroundEffects() {
   );
 }
 
-// --- 輔助組件：全螢幕按鈕 ---
-function FullScreenToggle() {
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  const toggleFullScreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      setIsFullscreen(true);
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-      }
-    }
-  };
-}
-
 export default function HostRoomPage({
   params,
 }: {
@@ -66,7 +49,32 @@ export default function HostRoomPage({
   const [summary, setSummary] = useState<GameSummaryResponse | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pollError, setPollError] = useState("");
+  
+  // --- 音效狀態 ---
+  const [isMuted, setIsMuted] = useState(false); // 預設開啟，如果瀏覽器阻擋會需要點擊
+  const audioWaitingRef = useRef<HTMLAudioElement | null>(null);
+  const audioSelectionRef = useRef<HTMLAudioElement | null>(null);
   const versionRef = useRef(0);
+
+  // --- 初始化音效 ---
+  useEffect(() => {
+    // 僅在客戶端執行
+    if (typeof window !== "undefined") {
+      audioWaitingRef.current = new Audio("/1.mp3");
+      audioWaitingRef.current.loop = true;
+      audioWaitingRef.current.volume = 0.5; // 背景音樂稍微小聲一點
+
+      audioSelectionRef.current = new Audio("/2.mp3");
+      audioSelectionRef.current.loop = true;
+      audioSelectionRef.current.volume = 0.6;
+    }
+
+    return () => {
+      // 組件卸載時停止音樂
+      audioWaitingRef.current?.pause();
+      audioSelectionRef.current?.pause();
+    };
+  }, []);
 
   useEffect(() => {
     if (!hostContext) {
@@ -88,7 +96,7 @@ export default function HostRoomPage({
     }
   }, [roomId]);
 
-  // 短輪詢邏輯 (保持不變)
+  // 短輪詢邏輯
   useEffect(() => {
     if (!hostContext) return;
     let cancelled = false;
@@ -118,7 +126,7 @@ export default function HostRoomPage({
     };
   }, [hostContext, roomId]);
 
-  // Summary logic (保持不變)
+  // Summary logic
   useEffect(() => {
     if (!roomState) return;
     if (roomState.room.status !== "FINISHED" || summary) return;
@@ -131,7 +139,57 @@ export default function HostRoomPage({
     fetchSummary();
   }, [roomId, roomState, summary]);
 
-  // 操作處理函數 (保持不變)
+  // --- 背景音樂控制邏輯 ---
+  useEffect(() => {
+    if (!roomState || isMuted) {
+      audioWaitingRef.current?.pause();
+      audioSelectionRef.current?.pause();
+      return;
+    }
+
+    const isWaiting = roomState.room.status === "WAITING";
+    const isPlaying = roomState.room.status === "PLAYING";
+    const isRoundSelecting = isPlaying && roomState.round?.status === "waiting_actions";
+
+    const playAudio = async (audio: HTMLAudioElement) => {
+      try {
+        // 如果還沒播放才播放
+        if (audio.paused) {
+          await audio.play();
+        }
+      } catch (err) {
+        console.warn("Autoplay blocked by browser. User interaction needed.", err);
+      }
+    };
+
+    if (isWaiting) {
+      // 狀態：等待開始 -> 播放 1.mp3
+      audioSelectionRef.current?.pause();
+      if(audioSelectionRef.current) audioSelectionRef.current.currentTime = 0;
+      
+      if (audioWaitingRef.current) playAudio(audioWaitingRef.current);
+    } 
+    else if (isRoundSelecting) {
+      // 狀態：選擇中 -> 播放 2.mp3
+      audioWaitingRef.current?.pause();
+      if(audioWaitingRef.current) audioWaitingRef.current.currentTime = 0;
+
+      if (audioSelectionRef.current) playAudio(audioSelectionRef.current);
+    } 
+    else {
+      // 其他狀態 (例如公布結果、遊戲結束) -> 停止所有音樂
+      audioWaitingRef.current?.pause();
+      audioSelectionRef.current?.pause();
+      // 可選：如果你希望公布結果時有其他音效，可以在這裡加入
+    }
+
+  }, [roomState, isMuted]); // 依賴 roomState 和 靜音狀態
+
+  const toggleMute = () => {
+    setIsMuted((prev) => !prev);
+  };
+
+  // 操作處理函數
   const handleStartGame = async () => {
     setIsProcessing(true);
     try { await startGame(roomId); await fetchLatestState(); } 
@@ -436,10 +494,20 @@ export default function HostRoomPage({
       <footer className="fixed bottom-0 left-0 w-full bg-slate-950/80 backdrop-blur-xl border-t border-white/10 p-4 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           
-          {/* 左側資訊 */}
-          <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 font-mono">
-             <div className={`w-2 h-2 rounded-full ${pollError ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`}></div>
-             系統狀態: {pollError ? "CONNECTION ERROR" : "ONLINE"}
+          {/* 左側資訊 & 音效開關 */}
+          <div className="hidden md:flex items-center gap-4 text-xs text-slate-500 font-mono">
+             <div className="flex items-center gap-2">
+               <div className={`w-2 h-2 rounded-full ${pollError ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`}></div>
+               系統狀態: {pollError ? "CONNECTION ERROR" : "ONLINE"}
+             </div>
+             <div className="h-4 w-[1px] bg-slate-700"></div>
+             {/* 音效切換按鈕 */}
+             <button 
+               onClick={toggleMute}
+               className={`flex items-center gap-2 px-3 py-1 rounded transition-colors ${!isMuted ? 'text-cyan-400 hover:bg-cyan-900/30' : 'text-slate-600 hover:text-slate-400'}`}
+             >
+               <span>{isMuted ? '🔇 MUTED' : '🔊 BGM ON'}</span>
+             </button>
           </div>
 
           {/* 中央控制按鈕群 */}
